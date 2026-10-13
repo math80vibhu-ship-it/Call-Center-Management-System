@@ -1,0 +1,25 @@
+# Build and Dependencies
+target/
+**/target/
+node_modules/
+dist/
+bin/
+
+# IDE and Editor Files
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+
+# Operating System Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Temporary & Log Files
+*.log
+*.tmp
+*.bak

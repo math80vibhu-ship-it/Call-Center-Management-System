@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexusCall DBMS - Enterprise Call Center Database & Lab Simulator</title>
+    <meta name="description" content="Advanced Call Center Management System with complete DDL, DML, DQL operations, interactive JDBC/ODBC simulator, and transaction control.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📞</text></svg>">
+</head>
+<body>
+
+    <!-- ======================================================================
+         LOGIN / AUTHENTICATION GATEWAY
+         ====================================================================== -->
+    <div id="authOverlay" class="auth-overlay">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="auth-logo-badge">🐘</div>
+                <h1>NexusCall DBMS</h1>
+                <p>Enterprise Call Center Relational System</p>
+                <div class="auth-ref-pill">PostgreSQL • Native Core Java JDBC & ODBC</div>
+            </div>
+
+            <form id="loginForm" onsubmit="return false;">
+                <div class="form-group">
+                    <label for="loginUsername">PostgreSQL Username</label>
+                    <div class="input-with-icon">
+                        <span class="input-icon">👤</span>
+                        <input type="text" id="loginUsername" class="input-control" placeholder="e.g. postgres" value="postgres" required autocomplete="username">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="loginPassword">PostgreSQL Password</label>
+                    <div class="input-with-icon">
+                        <span class="input-icon">🔒</span>
+                        <input type="password" id="loginPassword" class="input-control" placeholder="••••••••" value="postgres" required autocomplete="current-password">
+                    </div>
+                </div>
+
+                <div class="auth-quick-roles">
+                    <span>Quick Select User Profile:</span>
+                    <div class="role-chips">
+                        <button type="button" class="role-chip active" id="btnRoleAdmin" onclick="selectRole('postgres', 'postgres', 'Postgres DBA')">
+                            Postgres (DBA)
+                        </button>
+                        <button type="button" class="role-chip" id="btnRoleSupervisor" onclick="selectRole('supervisor', 'super2024', 'Supervisor')">
+                            Supervisor
+                        </button>
+                        <button type="button" class="role-chip" id="btnRoleAgent" onclick="selectRole('agent_sarah', 'agent123', 'Support Agent')">
+                            Agent
+                        </button>
+                    </div>
+                </div>
+
+                <button type="button" id="btnLogin" class="btn-primary" onclick="handleLogin()">
+                    <span>Connect via PostgreSQL JDBC</span>
+                    <span>➜</span>
+                </button>
+            </form>
+
+            <div class="auth-connection-summary">
+                <div>
+                    <span class="connection-dot"></span>
+                    <span id="connStringDisplay">jdbc:postgresql://localhost:5432/callcenter_db</span>
+                </div>
+                <span style="font-family: var(--font-mono); font-size: 10px;">org.postgresql.Driver</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================================
+         MAIN APPLICATION INTERFACE
+         ====================================================================== -->
+    <div class="app-container">
+        
+        <!-- Header Section -->
+        <header class="app-header">
+            <div class="brand-section">
+                <div class="brand-icon">🐘</div>
+                <div class="brand-details">
+                    <h2>
+                        NexusCall DBMS
+                        <span class="badge-version">PostgreSQL 16</span>
+                        <span class="badge-version">Java JDBC</span>
+                    </h2>
+                    <p class="brand-subtitle">Relational Call Center Backend Engine</p>
+                </div>
+            </div>
+
+            <div class="header-status-strip">
+                <div class="status-badge-item">
+                    <span class="status-indicator-green"></span>
+                    <span>PostgreSQL Connected (2.1ms)</span>
+                </div>
+                <div class="user-profile-badge">
+                    <div class="avatar-circle" id="userAvatar">P</div>
+                    <div>
+                        <div class="user-role-label" id="userNameDisplay">DBA (postgres)</div>
+                    </div>
+                    <button class="btn-icon-danger" title="Disconnect / Logout" onclick="handleLogout()">
+                        ⏻
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- KPI Metrics HUD -->
+        <section class="metrics-grid" id="metricsHud">
+            <div class="metric-card accent-cyan">
+                <div class="metric-top">
+                    <span class="metric-title">Total Call Volume</span>
+                    <span class="metric-icon">📊</span>
+                </div>
+                <div class="metric-value" id="kpiTotalCalls">0</div>
+                <div class="metric-subtext">Logged in database</div>
+            </div>
+
+            <div class="metric-card accent-emerald">
+                <div class="metric-top">
+                    <span class="metric-title">Resolution Rate</span>
+                    <span class="metric-icon">✓</span>
+                </div>
+                <div class="metric-value" id="kpiResolutionRate">0%</div>
+                <div class="metric-subtext">Resolved call tickets</div>
+            </div>
+
+            <div class="metric-card accent-amber">
+                <div class="metric-top">
+                    <span class="metric-title">Avg Handle Time</span>
+                    <span class="metric-icon">⏱</span>
+                </div>
+                <div class="metric-value" id="kpiAvgDuration">0s</div>
+                <div class="metric-subtext">Mean call duration</div>
+            </div>
+
+            <div class="metric-card accent-indigo">
+                <div class="metric-top">
+                    <span class="metric-title">Customer CSAT</span>
+                    <span class="metric-icon">★</span>
+                </div>
+                <div class="metric-value" id="kpiAvgRating">0.0</div>
+                <div class="metric-subtext">Out of 5.0 rating scale</div>
+            </div>
+
+            <div class="metric-card accent-rose">
+                <div class="metric-top">
+                    <span class="metric-title">Active Agents</span>
+                    <span class="metric-icon">👥</span>
+                </div>
+                <div class="metric-value" id="kpiActiveAgents">0</div>
+                <div class="metric-subtext">On shift across depts</div>
+            </div>
+        </section>
+
+        <!-- Transaction Control Strip (TCL) -->
+        <section class="transaction-bar">
+            <div class="transaction-info">
+                <span class="transaction-pill autocommit-on" id="autoCommitBadge">
+                    <span class="status-indicator-green"></span>
+                    Auto-Commit: ENABLED
+                </span>
+                <span class="transaction-desc" id="transactionStatusDesc">
+                    Statements are committed immediately (con.setAutoCommit(true)).
+                </span>
+            </div>
+
+            <div class="transaction-actions">
+                <div class="toggle-switch-container">
+                    <span>Auto-Commit Mode:</span>
+                    <label class="switch">
+                        <input type="checkbox" id="autoCommitToggle" checked onchange="handleToggleAutoCommit(this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <button class="btn-commit" id="btnCommit" onclick="handleCommit()">
+                    <span>💾</span> COMMIT
+                </button>
+                <button class="btn-rollback" id="btnRollback" onclick="handleRollback()">
+                    <span>↺</span> ROLLBACK
+                </button>
+                <button class="btn-action-pill" title="Reset all tables to initial lab data" onclick="handleResetDatabase()">
+                    <span>🔄</span> Reset DB
+                </button>
+            </div>
+        </section>
+
+        <!-- Operations Navigation & Table Tabs -->
+        <nav class="operations-nav">
+            <div class="table-tabs-group" id="tableTabsContainer">
+                <!-- Dynamically generated table tabs -->
+            </div>
+
+            <div class="quick-action-pills">
+                <button class="btn-action-pill btn-accent" onclick="openInsertModal()">
+                    <span>+</span> INSERT Record (DML)
+                </button>
+                <button class="btn-action-pill" onclick="openCreateTableModal()">
+                    <span>📑</span> CREATE TABLE (DDL)
+                </button>
+                <button class="btn-action-pill" onclick="openAlterTableModal()">
+                    <span>⚙</span> ALTER TABLE (DDL)
+                </button>
+                <button class="btn-action-pill btn-danger-pill" onclick="handleTruncateCurrentTable()">
+                    <span>✂</span> TRUNCATE (DDL)
+                </button>
+                <button class="btn-action-pill btn-danger-pill" onclick="handleDropCurrentTable()">
+                    <span>🗑</span> DROP (DDL)
+                </button>
+                <button class="btn-action-pill" onclick="exportCurrentTableCsv()">
+                    <span>📥</span> Export CSV
+                </button>
+            </div>
+        </nav>
+
+        <!-- DQL Filters & Search Controls -->
+        <section class="filter-toolbar">
+            <div class="search-input-box">
+                <span class="search-icon-pos">🔍</span>
+                <input type="text" id="tableSearchInput" placeholder="Filter rows by customer, phone, notes, agent..." oninput="handleSearchFilter()">
+            </div>
+
+            <div class="filter-controls-group" id="dqlFilterControls">
+                <!-- Dynamic filters tailored to active table -->
+                <select id="filterDepartment" class="select-control" onchange="handleSearchFilter()">
+                    <option value="">All Departments</option>
+                    <option value="Technical Support">Technical Support</option>
+                    <option value="Billing & Accounts">Billing & Accounts</option>
+                    <option value="Sales & Inquiries">Sales & Inquiries</option>
+                    <option value="Complaints">Complaints</option>
+                    <option value="General Helpdesk">General Helpdesk</option>
+                </select>
+
+                <select id="filterStatus" class="select-control" onchange="handleSearchFilter()">
+                    <option value="">All Call Statuses</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Escalated">Escalated</option>
+                    <option value="Pending Customer">Pending Customer</option>
+                    <option value="Dropped">Dropped</option>
+                </select>
+
+                <select id="filterRating" class="select-control" onchange="handleSearchFilter()">
+                    <option value="">All Ratings</option>
+                    <option value="5">5 Stars Only</option>
+                    <option value="4+">4+ Stars</option>
+                    <option value="below3">Below 3 Stars</option>
+                </select>
+
+                <select id="sortColumnSelect" class="select-control" onchange="handleSearchFilter()">
+                    <option value="">Default Sort</option>
+                    <!-- Dynamically populated -->
+                </select>
+
+                <select id="sortDirectionSelect" class="select-control" onchange="handleSearchFilter()">
+                    <option value="ASC">Ascending (▲)</option>
+                    <option value="DESC">Descending (▼)</option>
+                </select>
+            </div>
+        </section>
+
+        <!-- Primary Data Table View (ResultSet) -->
+        <main class="table-wrapper">
+            <div class="table-header-meta">
+                <div class="active-table-meta-title">
+                    <span id="activeTableLabel">TABLE: CALL_RECORDS</span>
+                    <span class="badge-version" id="tableRowCountBadge">15 Rows</span>
+                </div>
+                <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-cyan);" id="dqlQueryIndicator">
+                    SELECT * FROM CALL_RECORDS;
+                </div>
+            </div>
+
+            <div class="table-scroll-container">
+                <table class="data-table" id="mainDataTable">
+                    <thead id="tableHead">
+                        <!-- Columns injected dynamically -->
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Rows injected dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="table-footer">
+                <div>
+                    Showing <span id="displayingRowCount">0</span> record(s) • ResultSet cursor opened
+                </div>
+                <div style="font-family: var(--font-mono); font-size: 11px;">
+                    PreparedStatement Parameter Binding Active
+                </div>
+            </div>
+        </main>
+
+        <!-- Interactive SQL Terminal & Code Inspector Dual Grid -->
+        <section class="dual-panel-grid">
+            
+            <!-- Left: SQL Query Terminal -->
+            <div class="panel-card">
+                <div class="panel-card-header">
+                    <div class="panel-title">
+                        <span>⚡</span>
+                        <span>Interactive SQL Terminal (DDL, DML, DQL)</span>
+                    </div>
+                    <span class="badge-version">Oracle SQL*Plus Simulator</span>
+                </div>
+
+                <div class="panel-body">
+                    <div class="sql-presets-strip">
+                        <span style="font-size: 11px; color: var(--text-muted); margin-right: 4px;">Presets:</span>
+                        <button class="preset-chip" onclick="loadSqlPreset('dql_tech')">DQL: Tech Support Rating ≥ 4</button>
+                        <button class="preset-chip" onclick="loadSqlPreset('dql_group')">DQL: Group by Dept</button>
+                        <button class="preset-chip" onclick="loadSqlPreset('dml_update')">DML: Update Status</button>
+                        <button class="preset-chip" onclick="loadSqlPreset('ddl_create')">DDL: Create Shifts Table</button>
+                        <button class="preset-chip" onclick="loadSqlPreset('ddl_alter')">DDL: Add Recording Column</button>
+                    </div>
+
+                    <div class="sql-editor-container">
+                        <textarea id="sqlTerminalInput" class="sql-textarea" placeholder="Enter SQL statement here (e.g. SELECT * FROM CALL_RECORDS WHERE RATING = 5;)"></textarea>
+                    </div>
+
+                    <div class="terminal-controls">
+                        <div style="font-size: 11px; color: var(--text-muted);">
+                            Press <strong>Execute SQL</strong> or Ctrl+Enter to run statement
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn-secondary" onclick="document.getElementById('sqlTerminalInput').value = ''">Clear</button>
+                            <button class="btn-action-pill btn-accent" onclick="handleExecuteTerminalSql()">
+                                <span>▶</span> Execute SQL
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="terminalResultBox" class="terminal-result-box success" style="display: none;">
+                        <!-- Terminal execution status output -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: JDBC / ODBC Code & Stepper Simulator -->
+            <div class="panel-card">
+                <div class="panel-card-header">
+                    <div class="panel-title">
+                        <span>⚙</span>
+                        <span>Connectivity Inspector (Slide Reference)</span>
+                    </div>
+                    <span class="badge-version">Lab Exercise 11</span>
+                </div>
+
+                <nav class="code-tabs-nav">
+                    <button class="code-tab-btn active" id="tabCodeJdbc" onclick="switchCodeView('JDBC')">Java JDBC Code</button>
+                    <button class="code-tab-btn" id="tabCodeOdbc" onclick="switchCodeView('ODBC')">ODBC C / C++</button>
+                    <button class="code-tab-btn" id="tabCodeMeta" onclick="switchCodeView('META')">ResultSetMetaData</button>
+                </nav>
+
+                <div class="panel-body">
+                    <div id="codeDisplayArea" class="code-display-block">
+                        // JDBC PreparedStatement and ResultSet implementation will appear here...
+                    </div>
+
+                    <!-- ResultSet Stepper Tool (Slides 20, 21) -->
+                    <div class="cursor-stepper-box">
+                        <div class="stepper-header">
+                            <span>ResultSet Cursor Stepper Simulation</span>
+                            <span id="stepperStatusText" style="font-family: var(--font-mono); font-size: 11px;">Cursor: BEFORE_FIRST</span>
+                        </div>
+                        <div class="stepper-actions">
+                            <button class="btn-action-pill btn-accent" style="padding: 5px 12px; font-size: 11px;" onclick="handleStepResultSetNext()">
+                                <span>rs.next()</span> Step Next Row
+                            </button>
+                            <button class="btn-action-pill" style="padding: 5px 12px; font-size: 11px;" onclick="handleResetResultSetCursor()">
+                                <span>↺</span> Reset Cursor
+                            </button>
+                        </div>
+                        <div id="stepperOutputLine" style="margin-top: 8px; font-family: var(--font-mono); font-size: 11px; color: #a5b4fc;">
+                            Call rs.next() to step through rows like JDBC while(rs.next())
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+    </div>
+
+    <!-- ======================================================================
+         MODALS: INSERT, UPDATE, DDL
+         ====================================================================== -->
+
+    <!-- INSERT RECORD MODAL (DML) -->
+    <div id="modalInsert" class="modal-backdrop">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><span>+</span> INSERT Into <span id="insertModalTableTitle">CALL_RECORDS</span></h3>
+                <button class="btn-close-modal" onclick="closeModal('modalInsert')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 14px; font-size: 12px; color: var(--text-muted);">
+                    Uses JDBC PreparedStatement with parameterized bindings (Slide 22).
+                </div>
+                <form id="insertForm" class="form-grid-2">
+                    <!-- Dynamic form fields -->
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('modalInsert')">Cancel</button>
+                <button class="btn-action-pill btn-accent" onclick="submitInsertRecord()">
+                    <span>💾</span> Execute INSERT
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- UPDATE RECORD MODAL (DML) -->
+    <div id="modalUpdate" class="modal-backdrop">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><span>✏</span> UPDATE Record in <span id="updateModalTableTitle">CALL_RECORDS</span></h3>
+                <button class="btn-close-modal" onclick="closeModal('modalUpdate')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 14px; font-size: 12px; color: var(--text-muted);">
+                    Parameterized UPDATE with affected row count feedback (Slide 23).
+                </div>
+                <form id="updateForm" class="form-grid-2">
+                    <!-- Dynamic form fields -->
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('modalUpdate')">Cancel</button>
+                <button class="btn-action-pill btn-accent" onclick="submitUpdateRecord()">
+                    <span>💾</span> Execute UPDATE
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CREATE TABLE MODAL (DDL) -->
+    <div id="modalCreateTable" class="modal-backdrop">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><span>📑</span> CREATE TABLE Definition (DDL)</h3>
+                <button class="btn-close-modal" onclick="closeModal('modalCreateTable')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Table Name</label>
+                    <input type="text" id="newTableName" class="input-control" placeholder="e.g. AGENT_SHIFTS or CALL_SURVEYS" style="padding-left: 14px;">
+                </div>
+
+                <div style="margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                    <label style="font-weight: 700; font-size: 12px; color: var(--text-secondary);">Columns Definition</label>
+                    <button type="button" class="btn-action-pill" style="padding: 4px 10px; font-size: 11px;" onclick="addCreateColumnRow()">+ Add Column</button>
+                </div>
+
+                <div id="createTableColumnsList" style="display: flex; flex-direction: column; gap: 10px;">
+                    <!-- Column rows -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('modalCreateTable')">Cancel</button>
+                <button class="btn-action-pill btn-accent" onclick="submitCreateTable()">
+                    <span>🚀</span> Execute CREATE TABLE
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ALTER TABLE MODAL (DDL) -->
+    <div id="modalAlterTable" class="modal-backdrop">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><span>⚙</span> ALTER TABLE Specification (DDL)</h3>
+                <button class="btn-close-modal" onclick="closeModal('modalAlterTable')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Target Table</label>
+                    <select id="alterTargetTable" class="select-control" style="width: 100%;">
+                        <!-- options injected -->
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Action</label>
+                    <select id="alterActionType" class="select-control" style="width: 100%;" onchange="toggleAlterFields(this.value)">
+                        <option value="ADD">ADD Column</option>
+                        <option value="DROP">DROP Column</option>
+                    </select>
+                </div>
+
+                <div id="alterAddFields">
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label>New Column Name</label>
+                            <input type="text" id="alterColName" class="input-control" placeholder="e.g. RECORDING_URL" style="padding-left: 14px;">
+                        </div>
+                        <div class="form-group">
+                            <label>Datatype</label>
+                            <select id="alterColType" class="select-control" style="width: 100%; height: 42px;">
+                                <option value="VARCHAR2(255)">VARCHAR2(255)</option>
+                                <option value="VARCHAR2(50)">VARCHAR2(50)</option>
+                                <option value="NUMBER">NUMBER</option>
+                                <option value="DATE">DATE</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="alterDropFields" style="display: none;">
+                    <div class="form-group">
+                        <label>Select Column to Drop</label>
+                        <select id="alterDropColSelect" class="select-control" style="width: 100%;">
+                            <!-- Options -->
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('modalAlterTable')">Cancel</button>
+                <button class="btn-action-pill btn-accent" onclick="submitAlterTable()">
+                    <span>⚙</span> Execute ALTER TABLE
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATIONS CONTAINER -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="seedData.js"></script>
+    <script src="database.js"></script>
+    <script src="jdbcSimulator.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
