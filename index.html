@@ -99,6 +99,9 @@
                     <div>
                         <div class="user-role-label" id="userNameDisplay">DBA (postgres)</div>
                     </div>
+                    <button class="btn-action-pill" style="padding: 4px 10px; font-size: 11px;" onclick="handleLogout()" title="Return to Login Page">
+                        🔒 Login Screen
+                    </button>
                     <button class="btn-icon-danger" title="Disconnect / Logout" onclick="handleLogout()">
                         ⏻
                     </button>
@@ -106,281 +109,825 @@
             </div>
         </header>
 
-        <!-- KPI Metrics HUD -->
-        <section class="metrics-grid" id="metricsHud">
-            <div class="metric-card accent-cyan">
-                <div class="metric-top">
-                    <span class="metric-title">Total Call Volume</span>
-                    <span class="metric-icon">📊</span>
-                </div>
-                <div class="metric-value" id="kpiTotalCalls">0</div>
-                <div class="metric-subtext">Logged in database</div>
-            </div>
-
-            <div class="metric-card accent-emerald">
-                <div class="metric-top">
-                    <span class="metric-title">Resolution Rate</span>
-                    <span class="metric-icon">✓</span>
-                </div>
-                <div class="metric-value" id="kpiResolutionRate">0%</div>
-                <div class="metric-subtext">Resolved call tickets</div>
-            </div>
-
-            <div class="metric-card accent-amber">
-                <div class="metric-top">
-                    <span class="metric-title">Avg Handle Time</span>
-                    <span class="metric-icon">⏱</span>
-                </div>
-                <div class="metric-value" id="kpiAvgDuration">0s</div>
-                <div class="metric-subtext">Mean call duration</div>
-            </div>
-
-            <div class="metric-card accent-indigo">
-                <div class="metric-top">
-                    <span class="metric-title">Customer CSAT</span>
-                    <span class="metric-icon">★</span>
-                </div>
-                <div class="metric-value" id="kpiAvgRating">0.0</div>
-                <div class="metric-subtext">Out of 5.0 rating scale</div>
-            </div>
-
-            <div class="metric-card accent-rose">
-                <div class="metric-top">
-                    <span class="metric-title">Active Agents</span>
-                    <span class="metric-icon">👥</span>
-                </div>
-                <div class="metric-value" id="kpiActiveAgents">0</div>
-                <div class="metric-subtext">On shift across depts</div>
-            </div>
-        </section>
-
-        <!-- Transaction Control Strip (TCL) -->
-        <section class="transaction-bar">
-            <div class="transaction-info">
-                <span class="transaction-pill autocommit-on" id="autoCommitBadge">
-                    <span class="status-indicator-green"></span>
-                    Auto-Commit: ENABLED
-                </span>
-                <span class="transaction-desc" id="transactionStatusDesc">
-                    Statements are committed immediately (con.setAutoCommit(true)).
-                </span>
-            </div>
-
-            <div class="transaction-actions">
-                <div class="toggle-switch-container">
-                    <span>Auto-Commit Mode:</span>
-                    <label class="switch">
-                        <input type="checkbox" id="autoCommitToggle" checked onchange="handleToggleAutoCommit(this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-
-                <button class="btn-commit" id="btnCommit" onclick="handleCommit()">
-                    <span>💾</span> COMMIT
-                </button>
-                <button class="btn-rollback" id="btnRollback" onclick="handleRollback()">
-                    <span>↺</span> ROLLBACK
-                </button>
-                <button class="btn-action-pill" title="Reset all tables to initial lab data" onclick="handleResetDatabase()">
-                    <span>🔄</span> Reset DB
-                </button>
-            </div>
-        </section>
-
-        <!-- Operations Navigation & Table Tabs -->
-        <nav class="operations-nav">
-            <div class="table-tabs-group" id="tableTabsContainer">
-                <!-- Dynamically generated table tabs -->
-            </div>
-
-            <div class="quick-action-pills">
-                <button class="btn-action-pill btn-accent" onclick="openInsertModal()">
-                    <span>+</span> INSERT Record (DML)
-                </button>
-                <button class="btn-action-pill" onclick="openCreateTableModal()">
-                    <span>📑</span> CREATE TABLE (DDL)
-                </button>
-                <button class="btn-action-pill" onclick="openAlterTableModal()">
-                    <span>⚙</span> ALTER TABLE (DDL)
-                </button>
-                <button class="btn-action-pill btn-danger-pill" onclick="handleTruncateCurrentTable()">
-                    <span>✂</span> TRUNCATE (DDL)
-                </button>
-                <button class="btn-action-pill btn-danger-pill" onclick="handleDropCurrentTable()">
-                    <span>🗑</span> DROP (DDL)
-                </button>
-                <button class="btn-action-pill" onclick="exportCurrentTableCsv()">
-                    <span>📥</span> Export CSV
-                </button>
-            </div>
+        <!-- Main View Navigation Bar -->
+        <nav class="main-view-nav">
+            <button class="nav-view-btn active" id="btnNavRecords" onclick="switchMainView('records')">
+                <span class="nav-icon">📊</span>
+                <span>Database Records & DQL</span>
+            </button>
+            <button class="nav-view-btn" id="btnNavDdl" onclick="switchMainView('ddl')">
+                <span class="nav-icon">📑</span>
+                <span>Executed DDL Commands</span>
+                <span class="nav-badge">Schema</span>
+            </button>
+            <button class="nav-view-btn" id="btnNavDml" onclick="switchMainView('dml')">
+                <span class="nav-icon">⚡</span>
+                <span>Executed DML Commands</span>
+                <span class="nav-badge">Data Seeds</span>
+            </button>
+            <button class="nav-view-btn" id="btnNavTerminal" onclick="switchMainView('terminal')">
+                <span class="nav-icon">💻</span>
+                <span>SQL Terminal & Lab</span>
+            </button>
+            <button class="nav-view-btn" id="btnNavGuide" onclick="switchMainView('guide')">
+                <span class="nav-icon">🚀</span>
+                <span>Run & Installation Guide</span>
+                <span class="nav-badge">Commands</span>
+            </button>
         </nav>
 
-        <!-- DQL Filters & Search Controls -->
-        <section class="filter-toolbar">
-            <div class="search-input-box">
-                <span class="search-icon-pos">🔍</span>
-                <input type="text" id="tableSearchInput" placeholder="Filter rows by customer, phone, notes, agent..." oninput="handleSearchFilter()">
+        <!-- ======================================================================
+             VIEW 1: CALL CENTER DATABASE RECORDS & LIVE DQL
+             ====================================================================== -->
+        <section id="view-records" class="view-section active">
+            <!-- KPI Metrics HUD -->
+            <section class="metrics-grid" id="metricsHud">
+                <div class="metric-card accent-cyan">
+                    <div class="metric-top">
+                        <span class="metric-title">Total Call Volume</span>
+                        <span class="metric-icon">📊</span>
+                    </div>
+                    <div class="metric-value" id="kpiTotalCalls">0</div>
+                    <div class="metric-subtext">Logged in database</div>
+                </div>
+
+                <div class="metric-card accent-emerald">
+                    <div class="metric-top">
+                        <span class="metric-title">Resolution Rate</span>
+                        <span class="metric-icon">✓</span>
+                    </div>
+                    <div class="metric-value" id="kpiResolutionRate">0%</div>
+                    <div class="metric-subtext">Resolved call tickets</div>
+                </div>
+
+                <div class="metric-card accent-amber">
+                    <div class="metric-top">
+                        <span class="metric-title">Avg Handle Time</span>
+                        <span class="metric-icon">⏱</span>
+                    </div>
+                    <div class="metric-value" id="kpiAvgDuration">0s</div>
+                    <div class="metric-subtext">Mean call duration</div>
+                </div>
+
+                <div class="metric-card accent-indigo">
+                    <div class="metric-top">
+                        <span class="metric-title">Customer CSAT</span>
+                        <span class="metric-icon">★</span>
+                    </div>
+                    <div class="metric-value" id="kpiAvgRating">0.0</div>
+                    <div class="metric-subtext">Out of 5.0 rating scale</div>
+                </div>
+
+                <div class="metric-card accent-rose">
+                    <div class="metric-top">
+                        <span class="metric-title">Active Agents</span>
+                        <span class="metric-icon">👥</span>
+                    </div>
+                    <div class="metric-value" id="kpiActiveAgents">0</div>
+                    <div class="metric-subtext">On shift across depts</div>
+                </div>
+            </section>
+
+            <!-- Transaction Control Strip (TCL) -->
+            <section class="transaction-bar">
+                <div class="transaction-info">
+                    <span class="transaction-pill autocommit-on" id="autoCommitBadge">
+                        <span class="status-indicator-green"></span>
+                        Auto-Commit: ENABLED
+                    </span>
+                    <span class="transaction-desc" id="transactionStatusDesc">
+                        Statements are committed immediately (con.setAutoCommit(true)).
+                    </span>
+                </div>
+
+                <div class="transaction-actions">
+                    <div class="toggle-switch-container">
+                        <span>Auto-Commit Mode:</span>
+                        <label class="switch">
+                            <input type="checkbox" id="autoCommitToggle" checked onchange="handleToggleAutoCommit(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <button class="btn-commit" id="btnCommit" onclick="handleCommit()">
+                        <span>💾</span> COMMIT
+                    </button>
+                    <button class="btn-rollback" id="btnRollback" onclick="handleRollback()">
+                        <span>↺</span> ROLLBACK
+                    </button>
+                    <button class="btn-action-pill" title="Reset all tables to initial lab data" onclick="handleResetDatabase()">
+                        <span>🔄</span> Reset DB
+                    </button>
+                </div>
+            </section>
+
+            <!-- Operations Navigation & Table Tabs -->
+            <nav class="operations-nav">
+                <div class="table-tabs-group" id="tableTabsContainer">
+                    <!-- Dynamically generated table tabs -->
+                </div>
+
+                <div class="quick-action-pills">
+                    <button class="btn-action-pill btn-accent" onclick="openInsertModal()">
+                        <span>+</span> INSERT Record (DML)
+                    </button>
+                    <button class="btn-action-pill" onclick="openCreateTableModal()">
+                        <span>📑</span> CREATE TABLE (DDL)
+                    </button>
+                    <button class="btn-action-pill" onclick="openAlterTableModal()">
+                        <span>⚙</span> ALTER TABLE (DDL)
+                    </button>
+                    <button class="btn-action-pill btn-danger-pill" onclick="handleTruncateCurrentTable()">
+                        <span>✂</span> TRUNCATE (DDL)
+                    </button>
+                    <button class="btn-action-pill btn-danger-pill" onclick="handleDropCurrentTable()">
+                        <span>🗑</span> DROP (DDL)
+                    </button>
+                    <button class="btn-action-pill" onclick="exportCurrentTableCsv()">
+                        <span>📥</span> Export CSV
+                    </button>
+                </div>
+            </nav>
+
+            <!-- DQL Filters & Search Controls -->
+            <section class="filter-toolbar">
+                <div class="search-input-box">
+                    <span class="search-icon-pos">🔍</span>
+                    <input type="text" id="tableSearchInput" placeholder="Filter rows by customer, phone, notes, agent..." oninput="handleSearchFilter()">
+                </div>
+
+                <div class="filter-controls-group" id="dqlFilterControls">
+                    <select id="filterDepartment" class="select-control" onchange="handleSearchFilter()">
+                        <option value="">All Departments</option>
+                        <option value="Technical Support">Technical Support</option>
+                        <option value="Billing & Accounts">Billing & Accounts</option>
+                        <option value="Sales & Inquiries">Sales & Inquiries</option>
+                        <option value="Complaints">Complaints</option>
+                        <option value="General Helpdesk">General Helpdesk</option>
+                    </select>
+
+                    <select id="filterStatus" class="select-control" onchange="handleSearchFilter()">
+                        <option value="">All Call Statuses</option>
+                        <option value="Resolved">Resolved</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Escalated">Escalated</option>
+                        <option value="Pending Customer">Pending Customer</option>
+                        <option value="Dropped">Dropped</option>
+                    </select>
+
+                    <select id="filterRating" class="select-control" onchange="handleSearchFilter()">
+                        <option value="">All Ratings</option>
+                        <option value="5">5 Stars Only</option>
+                        <option value="4+">4+ Stars</option>
+                        <option value="below3">Below 3 Stars</option>
+                    </select>
+
+                    <select id="sortColumnSelect" class="select-control" onchange="handleSearchFilter()">
+                        <option value="">Default Sort</option>
+                    </select>
+
+                    <select id="sortDirectionSelect" class="select-control" onchange="handleSearchFilter()">
+                        <option value="ASC">Ascending (▲)</option>
+                        <option value="DESC">Descending (▼)</option>
+                    </select>
+                </div>
+            </section>
+
+            <!-- Primary Data Table View (ResultSet) -->
+            <main class="table-wrapper">
+                <div class="table-header-meta">
+                    <div class="active-table-meta-title">
+                        <span id="activeTableLabel">TABLE: CALL_RECORDS</span>
+                        <span class="badge-version" id="tableRowCountBadge">15 Rows</span>
+                    </div>
+                    <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-cyan);" id="dqlQueryIndicator">
+                        SELECT * FROM CALL_RECORDS;
+                    </div>
+                </div>
+
+                <div class="table-scroll-container">
+                    <table class="data-table" id="mainDataTable">
+                        <thead id="tableHead"></thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="table-footer">
+                    <div>
+                        Showing <span id="displayingRowCount">0</span> record(s) • ResultSet cursor opened
+                    </div>
+                    <div style="font-family: var(--font-mono); font-size: 11px;">
+                        PreparedStatement Parameter Binding Active
+                    </div>
+                </div>
+            </main>
+        </section>
+
+        <!-- ======================================================================
+             VIEW 2: EXECUTED DDL COMMANDS (DATA DEFINITION LANGUAGE)
+             ====================================================================== -->
+        <section id="view-ddl" class="view-section">
+            <div class="section-hero-banner">
+                <div class="banner-content">
+                    <h2><span>📑</span> Executed DDL Commands in PostgreSQL</h2>
+                    <p>All Data Definition Language (DDL) scripts executed to establish tables, integrity constraints, primary/foreign keys, check clauses, and B-Tree performance indexes in <strong>callcenter_db</strong>.</p>
+                </div>
+                <div class="banner-tags">
+                    <span class="banner-pill accent">PostgreSQL 16 DDL</span>
+                    <span class="banner-pill">CREATE TABLE</span>
+                    <span class="banner-pill">ALTER TABLE</span>
+                    <span class="banner-pill">INDEXES</span>
+                </div>
             </div>
 
-            <div class="filter-controls-group" id="dqlFilterControls">
-                <!-- Dynamic filters tailored to active table -->
-                <select id="filterDepartment" class="select-control" onchange="handleSearchFilter()">
-                    <option value="">All Departments</option>
-                    <option value="Technical Support">Technical Support</option>
-                    <option value="Billing & Accounts">Billing & Accounts</option>
-                    <option value="Sales & Inquiries">Sales & Inquiries</option>
-                    <option value="Complaints">Complaints</option>
-                    <option value="General Helpdesk">General Helpdesk</option>
-                </select>
+            <div class="command-hub-grid">
+                <!-- DDL Statements Sidebar -->
+                <div class="command-sidebar">
+                    <div class="command-sidebar-title">Executed DDL Statements</div>
+                    
+                    <button class="command-item-card active" id="ddlItem-customers" onclick="loadDdlDetail('customers')">
+                        <div class="command-item-header">
+                            <span class="command-item-name">CUSTOMERS</span>
+                            <span class="command-badge ddl">CREATE</span>
+                        </div>
+                        <p class="command-item-desc">SERIAL primary key, UNIQUE phone, DEFAULT values.</p>
+                    </button>
 
-                <select id="filterStatus" class="select-control" onchange="handleSearchFilter()">
-                    <option value="">All Call Statuses</option>
-                    <option value="Resolved">Resolved</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Escalated">Escalated</option>
-                    <option value="Pending Customer">Pending Customer</option>
-                    <option value="Dropped">Dropped</option>
-                </select>
+                    <button class="command-item-card" id="ddlItem-agents" onclick="loadDdlDetail('agents')">
+                        <div class="command-item-header">
+                            <span class="command-item-name">AGENTS</span>
+                            <span class="command-badge ddl">CREATE</span>
+                        </div>
+                        <p class="command-item-desc">Staff directory, UNIQUE extensions, NUMERIC CSAT rating.</p>
+                    </button>
 
-                <select id="filterRating" class="select-control" onchange="handleSearchFilter()">
-                    <option value="">All Ratings</option>
-                    <option value="5">5 Stars Only</option>
-                    <option value="4+">4+ Stars</option>
-                    <option value="below3">Below 3 Stars</option>
-                </select>
+                    <button class="command-item-card" id="ddlItem-call_records" onclick="loadDdlDetail('call_records')">
+                        <div class="command-item-header">
+                            <span class="command-item-name">CALL_RECORDS</span>
+                            <span class="command-badge ddl">CREATE + FK</span>
+                        </div>
+                        <p class="command-item-desc">Transactional log, Foreign Key to AGENTS, CHECK (rating 1-5).</p>
+                    </button>
 
-                <select id="sortColumnSelect" class="select-control" onchange="handleSearchFilter()">
-                    <option value="">Default Sort</option>
-                    <!-- Dynamically populated -->
-                </select>
+                    <button class="command-item-card" id="ddlItem-incidents" onclick="loadDdlDetail('incidents')">
+                        <div class="command-item-header">
+                            <span class="command-item-name">INCIDENTS</span>
+                            <span class="command-badge ddl">CREATE + CASCADE</span>
+                        </div>
+                        <p class="command-item-desc">Escalated tickets, FK ON DELETE CASCADE, CHECK (priority).</p>
+                    </button>
 
-                <select id="sortDirectionSelect" class="select-control" onchange="handleSearchFilter()">
-                    <option value="ASC">Ascending (▲)</option>
-                    <option value="DESC">Descending (▼)</option>
-                </select>
+                    <button class="command-item-card" id="ddlItem-indexes" onclick="loadDdlDetail('indexes')">
+                        <div class="command-item-header">
+                            <span class="command-item-name">INDEXES</span>
+                            <span class="command-badge ddl">INDEX</span>
+                        </div>
+                        <p class="command-item-desc">B-Tree performance indexes on department, status, agent.</p>
+                    </button>
+
+                    <button class="command-item-card" id="ddlItem-alter_drop" onclick="loadDdlDetail('alter_drop')">
+                        <div class="command-item-header">
+                            <span class="command-item-name">ALTER & DROP</span>
+                            <span class="command-badge ddl">ALTER/DROP</span>
+                        </div>
+                        <p class="command-item-desc">Schema modification & safe teardown with CASCADE.</p>
+                    </button>
+                </div>
+
+                <!-- DDL Statement Detail Viewer -->
+                <div class="command-detail-viewer">
+                    <div class="command-viewer-header">
+                        <div class="command-viewer-title">
+                            <span id="ddlViewerIcon">📑</span>
+                            <h3 id="ddlViewerTitle">CREATE TABLE customers</h3>
+                        </div>
+                        <div class="command-viewer-actions">
+                            <button class="btn-action-pill" onclick="copyCurrentDdlSql()">
+                                <span>📋</span> Copy DDL SQL
+                            </button>
+                            <button class="btn-action-pill btn-accent" onclick="runCurrentDdlInTerminal()">
+                                <span>⚡</span> Run in SQL Console
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="command-viewer-body">
+                        <div class="sql-code-box" id="ddlSqlCodeDisplay">
+                            <!-- Injected dynamically -->
+                        </div>
+
+                        <div class="command-meta-grid" id="ddlMetaGrid">
+                            <!-- Injected dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interactive DDL Workbench: Accept User Inputs -> Process -> Display Output -->
+            <div class="workbench-card">
+                <div class="workbench-header">
+                    <h3><span>⚙</span> Interactive DDL Workbench (Accepts User Schema Inputs)</h3>
+                    <span class="badge-version">Live Schema Processor</span>
+                </div>
+
+                <div class="workbench-grid">
+                    <!-- Input Form -->
+                    <form class="workbench-form" onsubmit="return false;">
+                        <div class="form-group">
+                            <label>DDL Operation</label>
+                            <select id="ddlWorkbenchAction" class="select-control" style="width: 100%;" onchange="handleDdlWorkbenchActionChange(this.value)">
+                                <option value="CREATE">CREATE TABLE (New Entity)</option>
+                                <option value="ALTER_ADD">ALTER TABLE: ADD COLUMN</option>
+                                <option value="ALTER_DROP">ALTER TABLE: DROP COLUMN</option>
+                                <option value="TRUNCATE">TRUNCATE TABLE (Empty Rows)</option>
+                                <option value="DROP">DROP TABLE (Remove Entity)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="ddlTargetTableGroup">
+                            <label>Target Table Name</label>
+                            <input type="text" id="ddlWorkbenchTableName" class="input-control" placeholder="e.g. AGENT_SHIFTS" value="AGENT_SHIFTS" style="padding-left: 14px;">
+                        </div>
+
+                        <div id="ddlCreateFields">
+                            <div class="form-group">
+                                <label>Column Definitions (comma separated)</label>
+                                <input type="text" id="ddlWorkbenchCols" class="input-control" placeholder="e.g. shift_id INT PRIMARY KEY, shift_name VARCHAR(40), start_time VARCHAR(20)" value="shift_id INT PRIMARY KEY, shift_name VARCHAR(40), start_time VARCHAR(20)" style="padding-left: 14px;">
+                            </div>
+                        </div>
+
+                        <div id="ddlAlterFields" style="display: none;">
+                            <div class="form-group">
+                                <label>Column Name</label>
+                                <input type="text" id="ddlWorkbenchColName" class="input-control" placeholder="e.g. RECORDING_URL" style="padding-left: 14px;">
+                            </div>
+                            <div class="form-group" id="ddlAlterTypeGroup">
+                                <label>Column Data Type</label>
+                                <select id="ddlWorkbenchColType" class="select-control" style="width: 100%;">
+                                    <option value="VARCHAR(255)">VARCHAR(255)</option>
+                                    <option value="INT">INT</option>
+                                    <option value="TEXT">TEXT</option>
+                                    <option value="TIMESTAMP">TIMESTAMP</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button type="button" class="btn-action-pill btn-accent" style="width: 100%; justify-content: center; padding: 12px;" onclick="executeDdlWorkbench()">
+                            <span>🚀</span> Execute DDL & Process Schema
+                        </button>
+                    </form>
+
+                    <!-- Output Panel -->
+                    <div class="workbench-output-panel">
+                        <div class="output-panel-title">
+                            <span>DDL Processing Output</span>
+                            <span id="ddlWorkbenchLatency" style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-cyan);">Ready</span>
+                        </div>
+                        <div id="ddlWorkbenchStatus" class="output-status-strip success">
+                            <span>Ready to accept DDL inputs.</span>
+                        </div>
+                        <div class="output-code-box" id="ddlWorkbenchOutputSql">-- Generated and executed DDL will appear here</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                            Current Database Tables in Catalog:
+                        </div>
+                        <div id="ddlWorkbenchActiveTables" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <!-- Injected badges -->
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
-        <!-- Primary Data Table View (ResultSet) -->
-        <main class="table-wrapper">
-            <div class="table-header-meta">
-                <div class="active-table-meta-title">
-                    <span id="activeTableLabel">TABLE: CALL_RECORDS</span>
-                    <span class="badge-version" id="tableRowCountBadge">15 Rows</span>
+        <!-- ======================================================================
+             VIEW 3: EXECUTED DML COMMANDS (DATA MANIPULATION LANGUAGE)
+             ====================================================================== -->
+        <section id="view-dml" class="view-section">
+            <div class="section-hero-banner">
+                <div class="banner-content">
+                    <h2><span>⚡</span> Executed DML Commands in PostgreSQL</h2>
+                    <p>All Data Manipulation Language (DML) scripts executed to pre-populate customers, agents, call logs, and support incidents in <strong>callcenter_db</strong>, along with live UPDATE and DELETE transactions.</p>
                 </div>
-                <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-cyan);" id="dqlQueryIndicator">
-                    SELECT * FROM CALL_RECORDS;
-                </div>
-            </div>
-
-            <div class="table-scroll-container">
-                <table class="data-table" id="mainDataTable">
-                    <thead id="tableHead">
-                        <!-- Columns injected dynamically -->
-                    </thead>
-                    <tbody id="tableBody">
-                        <!-- Rows injected dynamically -->
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="table-footer">
-                <div>
-                    Showing <span id="displayingRowCount">0</span> record(s) • ResultSet cursor opened
-                </div>
-                <div style="font-family: var(--font-mono); font-size: 11px;">
-                    PreparedStatement Parameter Binding Active
+                <div class="banner-tags">
+                    <span class="banner-pill accent">PostgreSQL 16 DML</span>
+                    <span class="banner-pill">INSERT INTO</span>
+                    <span class="banner-pill">UPDATE</span>
+                    <span class="banner-pill">DELETE</span>
                 </div>
             </div>
-        </main>
 
-        <!-- Interactive SQL Terminal & Code Inspector Dual Grid -->
-        <section class="dual-panel-grid">
-            
-            <!-- Left: SQL Query Terminal -->
-            <div class="panel-card">
-                <div class="panel-card-header">
-                    <div class="panel-title">
-                        <span>⚡</span>
-                        <span>Interactive SQL Terminal (DDL, DML, DQL)</span>
-                    </div>
-                    <span class="badge-version">Oracle SQL*Plus Simulator</span>
-                </div>
-
-                <div class="panel-body">
-                    <div class="sql-presets-strip">
-                        <span style="font-size: 11px; color: var(--text-muted); margin-right: 4px;">Presets:</span>
-                        <button class="preset-chip" onclick="loadSqlPreset('dql_tech')">DQL: Tech Support Rating ≥ 4</button>
-                        <button class="preset-chip" onclick="loadSqlPreset('dql_group')">DQL: Group by Dept</button>
-                        <button class="preset-chip" onclick="loadSqlPreset('dml_update')">DML: Update Status</button>
-                        <button class="preset-chip" onclick="loadSqlPreset('ddl_create')">DDL: Create Shifts Table</button>
-                        <button class="preset-chip" onclick="loadSqlPreset('ddl_alter')">DDL: Add Recording Column</button>
-                    </div>
-
-                    <div class="sql-editor-container">
-                        <textarea id="sqlTerminalInput" class="sql-textarea" placeholder="Enter SQL statement here (e.g. SELECT * FROM CALL_RECORDS WHERE RATING = 5;)"></textarea>
-                    </div>
-
-                    <div class="terminal-controls">
-                        <div style="font-size: 11px; color: var(--text-muted);">
-                            Press <strong>Execute SQL</strong> or Ctrl+Enter to run statement
+            <div class="command-hub-grid">
+                <!-- DML Statements Sidebar -->
+                <div class="command-sidebar">
+                    <div class="command-sidebar-title">Executed DML Statements</div>
+                    
+                    <button class="command-item-card active" id="dmlItem-customers" onclick="loadDmlDetail('customers')">
+                        <div class="command-item-header">
+                            <span class="command-item-name">INSERT Customers</span>
+                            <span class="command-badge dml">7 ROWS</span>
                         </div>
-                        <div style="display: flex; gap: 8px;">
-                            <button class="btn-secondary" onclick="document.getElementById('sqlTerminalInput').value = ''">Clear</button>
-                            <button class="btn-action-pill btn-accent" onclick="handleExecuteTerminalSql()">
-                                <span>▶</span> Execute SQL
+                        <p class="command-item-desc">Seeded VIP, Gold, and Standard customer subscribers.</p>
+                    </button>
+
+                    <button class="command-item-card" id="dmlItem-agents" onclick="loadDmlDetail('agents')">
+                        <div class="command-item-header">
+                            <span class="command-item-name">INSERT Agents</span>
+                            <span class="command-badge dml">5 ROWS</span>
+                        </div>
+                        <p class="command-item-desc">Seeded support representatives across 5 departments.</p>
+                    </button>
+
+                    <button class="command-item-card" id="dmlItem-call_records" onclick="loadDmlDetail('call_records')">
+                        <div class="command-item-header">
+                            <span class="command-item-name">INSERT Call Records</span>
+                            <span class="command-badge dml">15 ROWS</span>
+                        </div>
+                        <p class="command-item-desc">Realistic call durations, issue categories, CSAT ratings.</p>
+                    </button>
+
+                    <button class="command-item-card" id="dmlItem-incidents" onclick="loadDmlDetail('incidents')">
+                        <div class="command-item-header">
+                            <span class="command-item-name">INSERT Incidents</span>
+                            <span class="command-badge dml">4 ROWS</span>
+                        </div>
+                        <p class="command-item-desc">Escalated tickets with SLA deadlines and assigned NOC teams.</p>
+                    </button>
+
+                    <button class="command-item-card" id="dmlItem-updates" onclick="loadDmlDetail('updates')">
+                        <div class="command-item-header">
+                            <span class="command-item-name">UPDATE Commands</span>
+                            <span class="command-badge dml">UPDATE</span>
+                        </div>
+                        <p class="command-item-desc">Updating agent CSAT ratings, call status, and ticket SLA.</p>
+                    </button>
+
+                    <button class="command-item-card" id="dmlItem-deletes" onclick="loadDmlDetail('deletes')">
+                        <div class="command-item-header">
+                            <span class="command-item-name">DELETE Commands</span>
+                            <span class="command-badge dml">DELETE</span>
+                        </div>
+                        <p class="command-item-desc">Removing dropped calls and cascade-deleting incident tickets.</p>
+                    </button>
+                </div>
+
+                <!-- DML Statement Detail Viewer -->
+                <div class="command-detail-viewer">
+                    <div class="command-viewer-header">
+                        <div class="command-viewer-title">
+                            <span id="dmlViewerIcon">⚡</span>
+                            <h3 id="dmlViewerTitle">INSERT INTO customers</h3>
+                        </div>
+                        <div class="command-viewer-actions">
+                            <button class="btn-action-pill" onclick="copyCurrentDmlSql()">
+                                <span>📋</span> Copy DML SQL
+                            </button>
+                            <button class="btn-action-pill btn-accent" onclick="runCurrentDmlInTerminal()">
+                                <span>⚡</span> Run in SQL Console
                             </button>
                         </div>
                     </div>
 
-                    <div id="terminalResultBox" class="terminal-result-box success" style="display: none;">
-                        <!-- Terminal execution status output -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Right: JDBC / ODBC Code & Stepper Simulator -->
-            <div class="panel-card">
-                <div class="panel-card-header">
-                    <div class="panel-title">
-                        <span>⚙</span>
-                        <span>Connectivity Inspector (Slide Reference)</span>
-                    </div>
-                    <span class="badge-version">Lab Exercise 11</span>
-                </div>
-
-                <nav class="code-tabs-nav">
-                    <button class="code-tab-btn active" id="tabCodeJdbc" onclick="switchCodeView('JDBC')">Java JDBC Code</button>
-                    <button class="code-tab-btn" id="tabCodeOdbc" onclick="switchCodeView('ODBC')">ODBC C / C++</button>
-                    <button class="code-tab-btn" id="tabCodeMeta" onclick="switchCodeView('META')">ResultSetMetaData</button>
-                </nav>
-
-                <div class="panel-body">
-                    <div id="codeDisplayArea" class="code-display-block">
-                        // JDBC PreparedStatement and ResultSet implementation will appear here...
-                    </div>
-
-                    <!-- ResultSet Stepper Tool (Slides 20, 21) -->
-                    <div class="cursor-stepper-box">
-                        <div class="stepper-header">
-                            <span>ResultSet Cursor Stepper Simulation</span>
-                            <span id="stepperStatusText" style="font-family: var(--font-mono); font-size: 11px;">Cursor: BEFORE_FIRST</span>
+                    <div class="command-viewer-body">
+                        <div class="sql-code-box" id="dmlSqlCodeDisplay">
+                            <!-- Injected dynamically -->
                         </div>
-                        <div class="stepper-actions">
-                            <button class="btn-action-pill btn-accent" style="padding: 5px 12px; font-size: 11px;" onclick="handleStepResultSetNext()">
-                                <span>rs.next()</span> Step Next Row
-                            </button>
-                            <button class="btn-action-pill" style="padding: 5px 12px; font-size: 11px;" onclick="handleResetResultSetCursor()">
-                                <span>↺</span> Reset Cursor
-                            </button>
-                        </div>
-                        <div id="stepperOutputLine" style="margin-top: 8px; font-family: var(--font-mono); font-size: 11px; color: #a5b4fc;">
-                            Call rs.next() to step through rows like JDBC while(rs.next())
+
+                        <div class="command-meta-grid" id="dmlMetaGrid">
+                            <!-- Injected dynamically -->
                         </div>
                     </div>
                 </div>
             </div>
 
+            <!-- Interactive DML Workbench: Accept User Inputs -> Process -> Display Output -->
+            <div class="workbench-card">
+                <div class="workbench-header">
+                    <h3><span>✏</span> Interactive DML Workbench (Accepts User Record Inputs)</h3>
+                    <span class="badge-version">Live Data Processor</span>
+                </div>
+
+                <div class="workbench-grid">
+                    <!-- Input Form -->
+                    <form class="workbench-form" onsubmit="return false;">
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label>Target Table</label>
+                                <select id="dmlWorkbenchTableSelect" class="select-control" style="width: 100%;" onchange="handleDmlTableChange(this.value)">
+                                    <option value="CALL_RECORDS">CALL_RECORDS</option>
+                                    <option value="AGENTS">AGENTS</option>
+                                    <option value="CUSTOMERS">CUSTOMERS</option>
+                                    <option value="INCIDENTS">INCIDENTS</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>DML Operation</label>
+                                <select id="dmlWorkbenchOpSelect" class="select-control" style="width: 100%;" onchange="handleDmlOpChange(this.value)">
+                                    <option value="INSERT">INSERT Record</option>
+                                    <option value="UPDATE">UPDATE Existing Record</option>
+                                    <option value="DELETE">DELETE Record</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Inputs Container -->
+                        <div id="dmlWorkbenchDynamicInputs" style="display: flex; flex-direction: column; gap: 10px;">
+                            <!-- Injected dynamically based on table and op -->
+                        </div>
+
+                        <button type="button" class="btn-action-pill btn-accent" style="width: 100%; justify-content: center; padding: 12px;" onclick="executeDmlWorkbench()">
+                            <span>💾</span> Process & Execute DML Statement
+                        </button>
+                    </form>
+
+                    <!-- Output Panel -->
+                    <div class="workbench-output-panel">
+                        <div class="output-panel-title">
+                            <span>DML Processing Result</span>
+                            <span id="dmlWorkbenchLatency" style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-emerald);">Ready</span>
+                        </div>
+                        <div id="dmlWorkbenchStatus" class="output-status-strip success">
+                            <span>Ready to accept DML operations.</span>
+                        </div>
+                        <div class="output-code-box" id="dmlWorkbenchOutputSql">-- Generated parameterized DML query will appear here</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                            Resulting Output Preview (First 3 Rows):
+                        </div>
+                        <div class="output-preview-table-container">
+                            <table class="data-table" id="dmlWorkbenchPreviewTable" style="font-size: 11px;">
+                                <!-- Preview rows injected -->
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ======================================================================
+             VIEW 4: INTERACTIVE SQL TERMINAL & CONNECTIVITY LAB
+             ====================================================================== -->
+        <section id="view-terminal" class="view-section">
+            <div class="dual-panel-grid">
+                
+                <!-- Left: SQL Query Terminal -->
+                <div class="panel-card">
+                    <div class="panel-card-header">
+                        <div class="panel-title">
+                            <span>⚡</span>
+                            <span>Interactive SQL Terminal (DDL, DML, DQL)</span>
+                        </div>
+                        <span class="badge-version">PostgreSQL 16 CLI Simulator</span>
+                    </div>
+
+                    <div class="panel-body">
+                        <div class="sql-presets-strip">
+                            <span style="font-size: 11px; color: var(--text-muted); margin-right: 4px;">Presets:</span>
+                            <button class="preset-chip" onclick="loadSqlPreset('dql_tech')">DQL: Tech Support Rating ≥ 4</button>
+                            <button class="preset-chip" onclick="loadSqlPreset('dql_group')">DQL: Group by Dept</button>
+                            <button class="preset-chip" onclick="loadSqlPreset('dml_update')">DML: Update Status</button>
+                            <button class="preset-chip" onclick="loadSqlPreset('ddl_create')">DDL: Create Shifts Table</button>
+                            <button class="preset-chip" onclick="loadSqlPreset('ddl_alter')">DDL: Add Recording Column</button>
+                        </div>
+
+                        <div class="sql-editor-container">
+                            <textarea id="sqlTerminalInput" class="sql-textarea" placeholder="Enter SQL statement here (e.g. SELECT * FROM CALL_RECORDS WHERE RATING = 5;)"></textarea>
+                        </div>
+
+                        <div class="terminal-controls">
+                            <div style="font-size: 11px; color: var(--text-muted);">
+                                Press <strong>Execute SQL</strong> or Ctrl+Enter to run statement
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn-secondary" onclick="document.getElementById('sqlTerminalInput').value = ''">Clear</button>
+                                <button class="btn-action-pill btn-accent" onclick="handleExecuteTerminalSql()">
+                                    <span>▶</span> Execute SQL
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="terminalResultBox" class="terminal-result-box success" style="display: none;">
+                            <!-- Terminal execution status output -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: JDBC / ODBC Code & Stepper Simulator -->
+                <div class="panel-card">
+                    <div class="panel-card-header">
+                        <div class="panel-title">
+                            <span>⚙</span>
+                            <span>Connectivity Inspector (Slide Reference)</span>
+                        </div>
+                        <span class="badge-version">Lab Exercise 11</span>
+                    </div>
+
+                    <nav class="code-tabs-nav">
+                        <button class="code-tab-btn active" id="tabCodeJdbc" onclick="switchCodeView('JDBC')">Java JDBC Code</button>
+                        <button class="code-tab-btn" id="tabCodeOdbc" onclick="switchCodeView('ODBC')">ODBC C / C++</button>
+                        <button class="code-tab-btn" id="tabCodeMeta" onclick="switchCodeView('META')">ResultSetMetaData</button>
+                    </nav>
+
+                    <div class="panel-body">
+                        <div id="codeDisplayArea" class="code-display-block">
+                            // JDBC PreparedStatement and ResultSet implementation will appear here...
+                        </div>
+
+                        <!-- ResultSet Stepper Tool (Slides 20, 21) -->
+                        <div class="cursor-stepper-box">
+                            <div class="stepper-header">
+                                <span>ResultSet Cursor Stepper Simulation</span>
+                                <span id="stepperStatusText" style="font-family: var(--font-mono); font-size: 11px;">Cursor: BEFORE_FIRST</span>
+                            </div>
+                            <div class="stepper-actions">
+                                <button class="btn-action-pill btn-accent" style="padding: 5px 12px; font-size: 11px;" onclick="handleStepResultSetNext()">
+                                    <span>rs.next()</span> Step Next Row
+                                </button>
+                                <button class="btn-action-pill" style="padding: 5px 12px; font-size: 11px;" onclick="handleResetResultSetCursor()">
+                                    <span>↺</span> Reset Cursor
+                                </button>
+                            </div>
+                            <div id="stepperOutputLine" style="margin-top: 8px; font-family: var(--font-mono); font-size: 11px; color: #a5b4fc;">
+                                Call rs.next() to step through rows like JDBC while(rs.next())
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ======================================================================
+             VIEW 5: APPLICATION INSTALLATION & COMMANDS GUIDE (RUBRIC REQ 4)
+             ====================================================================== -->
+        <section id="view-guide" class="view-section">
+            <div class="section-hero-banner">
+                <div class="banner-content">
+                    <h2><span>🚀</span> Application Commands & Installation Guide</h2>
+                    <p>Complete step-by-step instructions and shell commands required to configure PostgreSQL, run the Java Spring Boot JDBC backend, and launch the web interface.</p>
+                </div>
+                <div class="banner-tags">
+                    <span class="banner-pill accent">Quick Setup</span>
+                    <span class="banner-pill">PostgreSQL</span>
+                    <span class="banner-pill">Spring Boot</span>
+                    <span class="banner-pill">Node.js</span>
+                </div>
+            </div>
+
+            <!-- Step 1: Prerequisites -->
+            <div class="guide-step-card">
+                <div class="guide-step-header">
+                    <div class="step-number-badge">1</div>
+                    <div class="guide-step-title">
+                        <h3>Environment Prerequisites & System Dependencies</h3>
+                        <p>Verify that your local system has the required runtimes installed.</p>
+                    </div>
+                </div>
+                <div class="guide-checklist-grid">
+                    <div class="checklist-item">
+                        <span class="checklist-icon">✓</span>
+                        <div class="checklist-text">
+                            <h4>PostgreSQL 12+ (or 16)</h4>
+                            <p>Relational database engine running on default port 5432.</p>
+                        </div>
+                    </div>
+                    <div class="checklist-item">
+                        <span class="checklist-icon">✓</span>
+                        <div class="checklist-text">
+                            <h4>Java Development Kit (JDK 17+)</h4>
+                            <p>Required to compile and run Spring Boot 3.2 backend.</p>
+                        </div>
+                    </div>
+                    <div class="checklist-item">
+                        <span class="checklist-icon">✓</span>
+                        <div class="checklist-text">
+                            <h4>Apache Maven 3.8+</h4>
+                            <p>Build automation tool for managing Java dependencies.</p>
+                        </div>
+                    </div>
+                    <div class="checklist-item">
+                        <span class="checklist-icon">✓</span>
+                        <div class="checklist-text">
+                            <h4>Node.js 16+ (or Python 3)</h4>
+                            <p>For zero-config local web server execution on port 3000.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: PostgreSQL Setup -->
+            <div class="guide-step-card">
+                <div class="guide-step-header">
+                    <div class="step-number-badge">2</div>
+                    <div class="guide-step-title">
+                        <h3>PostgreSQL Database Setup & Script Execution</h3>
+                        <p>Initialize the <code>callcenter_db</code> database and execute the DDL and DML scripts.</p>
+                    </div>
+                </div>
+                <div class="terminal-run-block">
+                    <div class="terminal-run-bar">
+                        <div class="dots"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span></div>
+                        <span>Command Prompt / Bash — PostgreSQL Setup</span>
+                        <button class="btn-action-pill" style="padding: 2px 8px; font-size: 10px;" onclick="copySnippet('psqlCommands')">Copy</button>
+                    </div>
+                    <pre class="terminal-run-content" id="psqlCommands"># 1. Connect to PostgreSQL as admin (default user postgres)
+psql -U postgres
+
+# 2. Create the Call Center Database
+CREATE DATABASE callcenter_db;
+
+# 3. Connect to the newly created database
+\c callcenter_db
+
+# 4. Execute the DDL Schema script (creates customers, agents, call_records, incidents)
+\i schema.sql
+
+# 5. Execute the DML Seed script (inserts records into all 4 tables)
+\i data.sql
+
+# 6. Verify table creation
+\dt</pre>
+                </div>
+            </div>
+
+            <!-- Step 3: Spring Boot Java Backend -->
+            <div class="guide-step-card">
+                <div class="guide-step-header">
+                    <div class="step-number-badge">3</div>
+                    <div class="guide-step-title">
+                        <h3>Run Java Spring Boot Native JDBC Backend</h3>
+                        <p>Launches the Spring Boot REST API using native HikariCP connection pooling and PostgreSQL.</p>
+                    </div>
+                </div>
+                <div class="terminal-run-block">
+                    <div class="terminal-run-bar">
+                        <div class="dots"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span></div>
+                        <span>Terminal — Spring Boot Run</span>
+                        <button class="btn-action-pill" style="padding: 2px 8px; font-size: 10px;" onclick="copySnippet('springCommands')">Copy</button>
+                    </div>
+                    <pre class="terminal-run-content" id="springCommands"># 1. Navigate to the backend directory
+cd backend
+
+# 2. Build and run Spring Boot application with Maven
+mvn clean spring-boot:run
+
+# (Alternative) Package as executable JAR and run
+mvn clean package -DskipTests
+java -jar target/nexuscall-jdbc-backend-1.0.0.jar</pre>
+                </div>
+            </div>
+
+            <!-- Step 4: Web Application Launch -->
+            <div class="guide-step-card">
+                <div class="guide-step-header">
+                    <div class="step-number-badge">4</div>
+                    <div class="guide-step-title">
+                        <h3>Launch Web Application Server (Zero Config)</h3>
+                        <p>Serves the responsive web frontend and local REST endpoints on port 3000.</p>
+                    </div>
+                </div>
+                <div class="terminal-run-block">
+                    <div class="terminal-run-bar">
+                        <div class="dots"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span></div>
+                        <span>Terminal — Web Application Server</span>
+                        <button class="btn-action-pill" style="padding: 2px 8px; font-size: 10px;" onclick="copySnippet('nodeCommands')">Copy</button>
+                    </div>
+                    <pre class="terminal-run-content" id="nodeCommands"># Option A: 1-Click Launch on Windows (double-click or run)
+start_server.bat
+
+# Option B: Run via Node.js (Zero npm dependencies required)
+node server.js
+
+# Option C: Fallback using Python 3
+python -m http.server 3000</pre>
+                </div>
+            </div>
+
+            <!-- Step 5: Access and Verification -->
+            <div class="guide-step-card">
+                <div class="guide-step-header">
+                    <div class="step-number-badge">5</div>
+                    <div class="guide-step-title">
+                        <h3>Access URLs & Verification Endpoints</h3>
+                        <p>Verify connectivity and interact with the deployed services.</p>
+                    </div>
+                </div>
+                <div class="command-meta-grid">
+                    <div class="meta-item">
+                        <label>Web Application Portal</label>
+                        <span><a href="http://localhost:3000" target="_blank" style="color: var(--accent-cyan);">http://localhost:3000</a></span>
+                    </div>
+                    <div class="meta-item">
+                        <label>SQL Console REST API</label>
+                        <span><a href="http://localhost:3000/api/sql/execute" target="_blank" style="color: var(--accent-cyan);">http://localhost:3000/api/sql/execute</a></span>
+                    </div>
+                    <div class="meta-item">
+                        <label>Tables Catalog API</label>
+                        <span><a href="http://localhost:3000/api/tables/" target="_blank" style="color: var(--accent-cyan);">http://localhost:3000/api/tables/</a></span>
+                    </div>
+                    <div class="meta-item">
+                        <label>Default Login Credentials</label>
+                        <span>Username: <code>postgres</code> | Password: <code>postgres</code></span>
+                    </div>
+                </div>
+            </div>
         </section>
 
     </div>

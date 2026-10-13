@@ -22,6 +22,9 @@ function initApp() {
     updateTransactionUi();
     updateCodeInspector();
 
+    // Initialize DDL & DML sections
+    initDdlAndDmlSections();
+
     // Setup SQL terminal Enter key handler (Ctrl+Enter or Cmd+Enter)
     const sqlInput = document.getElementById('sqlTerminalInput');
     if (sqlInput) {
@@ -42,7 +45,7 @@ function selectRole(user, pass, roleTitle) {
     document.getElementById('loginPassword').value = pass;
 
     document.querySelectorAll('.role-chip').forEach(btn => btn.classList.remove('active'));
-    if (user === 'admin') document.getElementById('btnRoleAdmin').classList.add('active');
+    if (user === 'postgres' || user === 'admin') document.getElementById('btnRoleAdmin').classList.add('active');
     else if (user === 'supervisor') document.getElementById('btnRoleSupervisor').classList.add('active');
     else if (user === 'agent_sarah') document.getElementById('btnRoleAgent').classList.add('active');
 }
@@ -57,8 +60,8 @@ function handleLogin() {
     }
 
     let role = 'Support Agent';
-    if (user.toLowerCase().includes('admin') || user.toLowerCase() === 'system') {
-        role = 'Administrator (DBA)';
+    if (user.toLowerCase().includes('admin') || user.toLowerCase() === 'system' || user.toLowerCase() === 'postgres') {
+        role = 'Postgres DBA';
     } else if (user.toLowerCase().includes('super')) {
         role = 'Supervisor';
     }
@@ -71,7 +74,7 @@ function handleLogin() {
     const overlay = document.getElementById('authOverlay');
     overlay.classList.add('hidden');
 
-    showToast('Database Connected', `Session opened via JDBC Type 4 driver as ${user}.`, 'success', '00000');
+    showToast('Database Connected', `Session opened via PostgreSQL JDBC Type 4 driver as ${user}.`, 'success', '00000');
     updateMetrics();
     refreshActiveTable();
 }
@@ -80,7 +83,7 @@ function handleLogout() {
     const overlay = document.getElementById('authOverlay');
     overlay.classList.remove('hidden');
     handleResetResultSetCursor();
-    showToast('Session Closed', 'Disconnected from Oracle database session.', 'info');
+    showToast('Session Closed', 'Disconnected from PostgreSQL database session.', 'info');
 }
 
 /* ==========================================================================
@@ -1236,3 +1239,732 @@ function showToast(title, message, type = 'info', sqlState = null) {
         setTimeout(() => toast.remove(), 300);
     }, 4500);
 }
+
+/* ==========================================================================
+   VIEW NAVIGATION & SWITCHING
+   ========================================================================== */
+
+let activeDdlKey = 'customers';
+let activeDmlKey = 'customers';
+
+function switchMainView(viewId) {
+    // Update nav buttons
+    document.querySelectorAll('.nav-view-btn').forEach(btn => btn.classList.remove('active'));
+    const activeBtn = document.getElementById(`btnNav${viewId.charAt(0).toUpperCase() + viewId.slice(1)}`);
+    if (activeBtn) activeBtn.classList.add('active');
+
+    // Update view sections
+    document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
+    const targetSection = document.getElementById(`view-${viewId}`);
+    if (targetSection) targetSection.classList.add('active');
+
+    // Section specific updates
+    if (viewId === 'records') {
+        refreshActiveTable();
+    } else if (viewId === 'ddl') {
+        loadDdlDetail(activeDdlKey);
+        refreshDdlWorkbenchActiveTables();
+    } else if (viewId === 'dml') {
+        loadDmlDetail(activeDmlKey);
+        const tbl = document.getElementById('dmlWorkbenchTableSelect').value || 'CALL_RECORDS';
+        handleDmlTableChange(tbl);
+    }
+}
+
+function copySnippet(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const text = el.innerText || el.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Copied to Clipboard', 'Commands copied for execution.', 'success');
+    }).catch(() => {
+        showToast('Clipboard Error', 'Could not copy commands.', 'error');
+    });
+}
+
+/* ==========================================================================
+   DDL (DATA DEFINITION LANGUAGE) CATALOG & DETAIL VIEWER
+   ========================================================================== */
+
+const DDL_CATALOG = {
+    customers: {
+        title: "CREATE TABLE customers",
+        badge: "CREATE",
+        icon: "👥",
+        sql: `-- 1. CUSTOMERS TABLE (Subscribers Directory)
+CREATE TABLE customers (
+    cust_id         SERIAL PRIMARY KEY,
+    name            VARCHAR(60) NOT NULL,
+    phone           VARCHAR(20) NOT NULL UNIQUE,
+    tier            VARCHAR(20) NOT NULL DEFAULT 'Standard',
+    city            VARCHAR(40) NOT NULL,
+    total_calls     INT NOT NULL DEFAULT 0,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);`,
+        meta: [
+            { label: "Entity Purpose", value: "Customer / Subscriber Master Directory" },
+            { label: "Primary Key", value: "cust_id (SERIAL auto-incrementing integer)" },
+            { label: "Unique Constraint", value: "phone (VARCHAR(20) UNIQUE)" },
+            { label: "Default Clauses", value: "tier='Standard', total_calls=0, created_at=CURRENT_TIMESTAMP" }
+        ]
+    },
+    agents: {
+        title: "CREATE TABLE agents",
+        badge: "CREATE",
+        icon: "🎧",
+        sql: `-- 2. AGENTS TABLE (Call Center Support Staff)
+CREATE TABLE agents (
+    agent_id        SERIAL PRIMARY KEY,
+    agent_name      VARCHAR(60) NOT NULL,
+    email           VARCHAR(60) NOT NULL UNIQUE,
+    department      VARCHAR(40) NOT NULL,
+    extension       INT NOT NULL UNIQUE,
+    shift           VARCHAR(30) NOT NULL,
+    status          VARCHAR(20) NOT NULL DEFAULT 'Active',
+    csat_avg        NUMERIC(3, 2) NOT NULL DEFAULT 4.00,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);`,
+        meta: [
+            { label: "Entity Purpose", value: "Staff roster, shifts, and performance metrics" },
+            { label: "Primary Key", value: "agent_id (SERIAL auto-increment)" },
+            { label: "Unique Constraints", value: "email (UNIQUE), extension (UNIQUE internal line)" },
+            { label: "Numeric Precision", value: "csat_avg NUMERIC(3, 2) default 4.00" }
+        ]
+    },
+    call_records: {
+        title: "CREATE TABLE call_records",
+        badge: "CREATE + FK",
+        icon: "📞",
+        sql: `-- 3. CALL_RECORDS TABLE (Primary Transactional Table)
+CREATE TABLE call_records (
+    call_id         SERIAL PRIMARY KEY,
+    customer_name   VARCHAR(60) NOT NULL,
+    phone_number    VARCHAR(20) NOT NULL,
+    agent_id        INT NOT NULL,
+    agent_name      VARCHAR(60) NOT NULL,
+    department      VARCHAR(40) NOT NULL,
+    call_type       VARCHAR(25) NOT NULL,
+    call_status     VARCHAR(25) NOT NULL,
+    duration_secs   INT NOT NULL,
+    rating          INT CHECK (rating >= 1 AND rating <= 5),
+    call_date       VARCHAR(30) NOT NULL,
+    issue_category  VARCHAR(50) NOT NULL,
+    notes           TEXT,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_call_agent FOREIGN KEY (agent_id) 
+        REFERENCES agents (agent_id) ON DELETE RESTRICT
+);`,
+        meta: [
+            { label: "Entity Purpose", value: "Inbound/Outbound call event transactional logs" },
+            { label: "Foreign Key", value: "agent_id -> agents(agent_id) [ON DELETE RESTRICT]" },
+            { label: "Check Constraint", value: "rating CHECK (rating >= 1 AND rating <= 5)" },
+            { label: "Storage Datatypes", value: "notes TEXT, duration_secs INT, created_at TIMESTAMP" }
+        ]
+    },
+    incidents: {
+        title: "CREATE TABLE incidents",
+        badge: "CREATE + CASCADE",
+        icon: "🚨",
+        sql: `-- 4. INCIDENTS TABLE (Escalations & SLA Tickets)
+CREATE TABLE incidents (
+    ticket_id       SERIAL PRIMARY KEY,
+    call_id         INT NOT NULL,
+    issue_type      VARCHAR(50) NOT NULL,
+    priority        VARCHAR(20) NOT NULL CHECK (priority IN ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW')),
+    assigned_team   VARCHAR(40) NOT NULL,
+    sla_hours       INT NOT NULL DEFAULT 24,
+    status          VARCHAR(25) NOT NULL DEFAULT 'OPEN',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_incident_call FOREIGN KEY (call_id) 
+        REFERENCES call_records (call_id) ON DELETE CASCADE
+);`,
+        meta: [
+            { label: "Entity Purpose", value: "Customer trouble tickets and NOC escalations" },
+            { label: "Cascade Rule", value: "call_id -> call_records(call_id) [ON DELETE CASCADE]" },
+            { label: "Check Constraint", value: "priority IN ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW')" },
+            { label: "Default SLA", value: "sla_hours INT DEFAULT 24, status='OPEN'" }
+        ]
+    },
+    indexes: {
+        title: "CREATE INDEX Performance Indexes",
+        badge: "INDEX",
+        icon: "⚡",
+        sql: `-- 5. POSTGRESQL PERFORMANCE INDEXES (B-Tree)
+CREATE INDEX idx_calls_dept ON call_records(department);
+CREATE INDEX idx_calls_status ON call_records(call_status);
+CREATE INDEX idx_calls_agent ON call_records(agent_id);
+CREATE INDEX idx_incidents_priority ON incidents(priority);`,
+        meta: [
+            { label: "Index Type", value: "PostgreSQL B-Tree Indexes" },
+            { label: "Query Acceleration", value: "Accelerates WHERE department = '...' queries (O(log n))" },
+            { label: "Foreign Key Speed", value: "Indexes agent_id to optimize JOIN lookups" },
+            { label: "Priority Filter", value: "Enables instant retrieval of CRITICAL tickets" }
+        ]
+    },
+    alter_drop: {
+        title: "ALTER TABLE & DROP TABLE Specifications",
+        badge: "ALTER/DROP",
+        icon: "⚙",
+        sql: `-- 6. SCHEMA ALTERATION & TEARDOWN STATEMENTS
+-- Add audio recording URL column to call_records
+ALTER TABLE call_records ADD COLUMN recording_url VARCHAR(255);
+
+-- Drop column if no longer needed
+ALTER TABLE call_records DROP COLUMN recording_url;
+
+-- Drop tables in reverse order of foreign key dependencies
+DROP TABLE IF EXISTS incidents CASCADE;
+DROP TABLE IF EXISTS call_records CASCADE;
+DROP TABLE IF EXISTS agents CASCADE;
+DROP TABLE IF EXISTS customers CASCADE;`,
+        meta: [
+            { label: "DDL Actions", value: "ALTER TABLE ADD COLUMN / DROP COLUMN / DROP TABLE" },
+            { label: "Referential Handling", value: "CASCADE drops dependent foreign keys safely" },
+            { label: "Safety Clause", value: "IF EXISTS prevents errors when table is absent" },
+            { label: "Catalog Update", value: "Synchronously updates information_schema.tables" }
+        ]
+    }
+};
+
+function initDdlAndDmlSections() {
+    loadDdlDetail('customers');
+    loadDmlDetail('customers');
+    refreshDdlWorkbenchActiveTables();
+    handleDmlTableChange('CALL_RECORDS');
+}
+
+function loadDdlDetail(key) {
+    activeDdlKey = key;
+    const item = DDL_CATALOG[key];
+    if (!item) return;
+
+    // Sidebar active state
+    document.querySelectorAll('.command-sidebar .command-item-card').forEach(c => {
+        if (c.id && c.id.startsWith('ddlItem-')) c.classList.remove('active');
+    });
+    const activeCard = document.getElementById(`ddlItem-${key}`);
+    if (activeCard) activeCard.classList.add('active');
+
+    // Header info
+    document.getElementById('ddlViewerIcon').textContent = item.icon;
+    document.getElementById('ddlViewerTitle').textContent = item.title;
+
+    // Syntax-highlighted SQL
+    document.getElementById('ddlSqlCodeDisplay').innerHTML = formatSqlHighlight(item.sql);
+
+    // Meta grid
+    const metaContainer = document.getElementById('ddlMetaGrid');
+    metaContainer.innerHTML = '';
+    item.meta.forEach(m => {
+        const div = document.createElement('div');
+        div.className = 'meta-item';
+        div.innerHTML = `<label>${m.label}</label><span>${m.value}</span>`;
+        metaContainer.appendChild(div);
+    });
+}
+
+function copyCurrentDdlSql() {
+    const item = DDL_CATALOG[activeDdlKey];
+    if (!item) return;
+    navigator.clipboard.writeText(item.sql).then(() => {
+        showToast('DDL SQL Copied', `Copied definition for ${item.title}.`, 'success');
+    });
+}
+
+function runCurrentDdlInTerminal() {
+    const item = DDL_CATALOG[activeDdlKey];
+    if (!item) return;
+    switchMainView('terminal');
+    const input = document.getElementById('sqlTerminalInput');
+    if (input) {
+        input.value = item.sql;
+        input.focus();
+    }
+    showToast('Sent to Terminal', 'DDL statement loaded into SQL terminal.', 'info');
+}
+
+function handleDdlWorkbenchActionChange(action) {
+    const createFields = document.getElementById('ddlCreateFields');
+    const alterFields = document.getElementById('ddlAlterFields');
+    const alterTypeGroup = document.getElementById('ddlAlterTypeGroup');
+
+    if (action === 'CREATE') {
+        createFields.style.display = 'block';
+        alterFields.style.display = 'none';
+    } else if (action === 'ALTER_ADD') {
+        createFields.style.display = 'none';
+        alterFields.style.display = 'block';
+        alterTypeGroup.style.display = 'block';
+    } else if (action === 'ALTER_DROP') {
+        createFields.style.display = 'none';
+        alterFields.style.display = 'block';
+        alterTypeGroup.style.display = 'none';
+    } else {
+        // TRUNCATE or DROP
+        createFields.style.display = 'none';
+        alterFields.style.display = 'none';
+    }
+}
+
+function executeDdlWorkbench() {
+    const action = document.getElementById('ddlWorkbenchAction').value;
+    const tableName = (document.getElementById('ddlWorkbenchTableName').value || '').trim();
+
+    if (!tableName) {
+        showToast('DDL Error', 'Please specify a target table name.', 'error');
+        return;
+    }
+
+    const startTime = performance.now();
+    try {
+        let executedSql = '';
+        let message = '';
+
+        if (action === 'CREATE') {
+            const colsInput = document.getElementById('ddlWorkbenchCols').value.trim();
+            const colParts = colsInput.split(',').map(s => s.trim()).filter(Boolean);
+            const columns = colParts.map(colDef => {
+                const parts = colDef.split(/\s+/);
+                const name = parts[0];
+                const type = parts[1] || 'VARCHAR(50)';
+                const isPk = colDef.toUpperCase().includes('PRIMARY KEY');
+                return { name, type, isPk };
+            });
+
+            const res = window.db.createTable(tableName, columns);
+            executedSql = res.sql;
+            message = res.message;
+        } else if (action === 'ALTER_ADD') {
+            const colName = document.getElementById('ddlWorkbenchColName').value.trim();
+            const colType = document.getElementById('ddlWorkbenchColType').value;
+            if (!colName) throw new Error('Column name is required for ALTER TABLE ADD.');
+            const res = window.db.alterTableAddColumn(tableName, colName, colType);
+            executedSql = res.sql;
+            message = res.message;
+        } else if (action === 'ALTER_DROP') {
+            const colName = document.getElementById('ddlWorkbenchColName').value.trim();
+            if (!colName) throw new Error('Column name is required for ALTER TABLE DROP.');
+            const res = window.db.alterTableDropColumn(tableName, colName);
+            executedSql = res.sql;
+            message = res.message;
+        } else if (action === 'TRUNCATE') {
+            const res = window.db.truncateTable(tableName);
+            executedSql = res.sql;
+            message = res.message;
+        } else if (action === 'DROP') {
+            const res = window.db.dropTable(tableName);
+            executedSql = res.sql;
+            message = res.message;
+        }
+
+        const duration = (performance.now() - startTime).toFixed(1);
+        document.getElementById('ddlWorkbenchLatency').textContent = `${duration} ms`;
+        const statusBox = document.getElementById('ddlWorkbenchStatus');
+        statusBox.className = 'output-status-strip success';
+        statusBox.textContent = `✓ ${message}`;
+
+        document.getElementById('ddlWorkbenchOutputSql').textContent = executedSql;
+
+        renderTableTabs();
+        refreshActiveTable();
+        refreshDdlWorkbenchActiveTables();
+        updateMetrics();
+        showToast('DDL Executed', message, 'success');
+    } catch (err) {
+        const duration = (performance.now() - startTime).toFixed(1);
+        document.getElementById('ddlWorkbenchLatency').textContent = `${duration} ms`;
+        const statusBox = document.getElementById('ddlWorkbenchStatus');
+        statusBox.className = 'output-status-strip error';
+        statusBox.textContent = `✕ ${err.message}`;
+        showToast('DDL Execution Error', err.message, 'error');
+    }
+}
+
+function refreshDdlWorkbenchActiveTables() {
+    const container = document.getElementById('ddlWorkbenchActiveTables');
+    if (!container) return;
+    container.innerHTML = '';
+    const names = window.db.getTableNames();
+    names.forEach(name => {
+        const span = document.createElement('span');
+        span.className = 'banner-pill accent';
+        span.style.padding = '3px 8px';
+        span.style.fontSize = '10px';
+        span.textContent = `${name} (${window.db.tables[name].rows.length})`;
+        container.appendChild(span);
+    });
+}
+
+/* ==========================================================================
+   DML (DATA MANIPULATION LANGUAGE) CATALOG & DETAIL VIEWER
+   ========================================================================== */
+
+const DML_CATALOG = {
+    customers: {
+        title: "INSERT INTO customers (7 Seed Records)",
+        badge: "INSERT",
+        icon: "👥",
+        sql: `-- 1. INSERT CUSTOMERS (Subscriber Seed Dataset)
+INSERT INTO customers (cust_id, name, phone, tier, city, total_calls) VALUES
+(501, 'Aditya Sharma', '+91 98765 43210', 'Platinum VIP', 'Chennai', 4),
+(502, 'Meera Nambiar', '+91 98112 34567', 'Gold', 'Bengaluru', 2),
+(503, 'Rajesh Subramanian', '+91 99400 88219', 'Gold', 'Chennai', 7),
+(504, 'Deepak Chawla', '+91 98200 11984', 'Platinum VIP', 'Mumbai', 3),
+(505, 'Kavita Menon', '+91 94440 23156', 'Silver', 'Hyderabad', 1),
+(506, 'Suresh Kumar', '+91 97890 65432', 'Standard', 'Coimbatore', 2),
+(507, 'Sneha Patel', '+91 96543 21098', 'Gold', 'Ahmedabad', 3);`,
+        meta: [
+            { label: "Rows Seeded", value: "7 Records Inserted" },
+            { label: "Target Table", value: "CUSTOMERS" },
+            { label: "Subscribers", value: "Platinum VIP (2), Gold (3), Silver (1), Standard (1)" },
+            { label: "Geographies", value: "Chennai, Bengaluru, Mumbai, Hyderabad, Ahmedabad" }
+        ]
+    },
+    agents: {
+        title: "INSERT INTO agents (5 Support Agents)",
+        badge: "INSERT",
+        icon: "🎧",
+        sql: `-- 2. INSERT AGENTS (Staff Directory)
+INSERT INTO agents (agent_id, agent_name, email, department, extension, shift, status, csat_avg) VALUES
+(1, 'Priya Raman', 'priya.raman@nexuscall.com', 'Technical Support', 401, 'Morning (08:00 - 16:00)', 'Active', 4.90),
+(2, 'Rahul Verma', 'rahul.verma@nexuscall.com', 'Billing & Accounts', 402, 'Morning (08:00 - 16:00)', 'Active', 4.60),
+(3, 'Ananya Sen', 'ananya.sen@nexuscall.com', 'Complaints', 403, 'General (10:00 - 18:00)', 'On Call', 4.10),
+(4, 'Arjun Das', 'arjun.das@nexuscall.com', 'Sales & Inquiries', 404, 'Evening (14:00 - 22:00)', 'Active', 4.80),
+(5, 'Kavita Nair', 'kavita.nair@nexuscall.com', 'General Helpdesk', 405, 'Evening (14:00 - 22:00)', 'Break', 4.40);`,
+        meta: [
+            { label: "Rows Seeded", value: "5 Support Representatives" },
+            { label: "Departments", value: "Tech Support, Billing, Complaints, Sales, Helpdesk" },
+            { label: "Shifts Covered", value: "Morning, General, Evening shifts" },
+            { label: "Performance", value: "Mean CSAT 4.56 / 5.00 rating" }
+        ]
+    },
+    call_records: {
+        title: "INSERT INTO call_records (15 Transactional Calls)",
+        badge: "INSERT",
+        icon: "📞",
+        sql: `-- 3. INSERT CALL_RECORDS (Primary Call Transaction Logs)
+INSERT INTO call_records (call_id, customer_name, phone_number, agent_id, agent_name, department, call_type, call_status, duration_secs, rating, call_date, issue_category, notes) VALUES
+(1001, 'Aditya Sharma', '+91 98765 43210', 1, 'Priya Raman', 'Technical Support', 'Inbound', 'Resolved', 340, 5, '2026-10-12 09:15', 'Fiber Broadband Outage', 'Router rebooted, DNS flushed. Signal levels normalized.'),
+(1002, 'Meera Nambiar', '+91 98112 34567', 2, 'Rahul Verma', 'Billing & Accounts', 'Inbound', 'Resolved', 215, 4, '2026-10-12 09:40', 'Duplicate Charge', 'Refund credit of INR 499 initiated to payment source.'),
+(1003, 'Rajesh Subramanian', '+91 99400 88219', 3, 'Ananya Sen', 'Complaints', 'Escalated', 'In Progress', 680, 2, '2026-10-12 10:05', 'Frequent Disconnection', 'Escalated to L2 Field Engineer for physical line check.'),
+(1004, 'Deepak Chawla', '+91 98200 11984', 1, 'Priya Raman', 'Technical Support', 'Inbound', 'Resolved', 190, 5, '2026-10-12 10:30', 'Modem Configuration', 'Wi-Fi 5GHz band channel reconfigured.'),
+(1005, 'Kavita Menon', '+91 94440 23156', 4, 'Arjun Das', 'Sales & Inquiries', 'Inbound', 'Resolved', 420, 5, '2026-10-12 11:10', 'Plan Upgrade', 'Upgraded customer to Gigabit Ultra Plan with free OTT pack.'),
+(1006, 'Suresh Kumar', '+91 97890 65432', 2, 'Rahul Verma', 'Billing & Accounts', 'Outbound', 'Resolved', 160, 4, '2026-10-12 11:45', 'Payment Reminder', 'Customer confirmed online UPI payment completion.');`,
+        meta: [
+            { label: "Rows Seeded", value: "15 Transactional Call Records" },
+            { label: "Call Classifications", value: "Inbound (12), Outbound (1), Escalated (1), Follow-up (1)" },
+            { label: "Duration Range", value: "45s to 680s (Avg ~325s)" },
+            { label: "Resolution Status", value: "Resolved (12), In Progress (2), Dropped (1)" }
+        ]
+    },
+    incidents: {
+        title: "INSERT INTO incidents (4 Escalation Tickets)",
+        badge: "INSERT",
+        icon: "🚨",
+        sql: `-- 4. INSERT INCIDENTS (Escalated Trouble Tickets)
+INSERT INTO incidents (ticket_id, call_id, issue_type, priority, assigned_team, sla_hours, status) VALUES
+(9021, 1003, 'Physical Fiber Cut', 'CRITICAL', 'L2 Field Ops', 4, 'IN_PROGRESS'),
+(9022, 1008, 'Static IP Provisioning', 'MEDIUM', 'NOC Routing', 24, 'OPEN'),
+(9023, 1010, 'Core Switch Latency', 'HIGH', 'Network Infra', 8, 'IN_PROGRESS'),
+(9024, 1013, 'Downstream Packet Drop', 'HIGH', 'Broadband Core', 12, 'OPEN');`,
+        meta: [
+            { label: "Rows Seeded", value: "4 Escalated Tickets" },
+            { label: "Priority Breakdown", value: "CRITICAL (1), HIGH (2), MEDIUM (1)" },
+            { label: "Assigned Units", value: "L2 Field Ops, NOC Routing, Network Infra, Broadband Core" },
+            { label: "SLA Commitments", value: "4h (Critical) to 24h (Standard)" }
+        ]
+    },
+    updates: {
+        title: "UPDATE Statements Executed in PostgreSQL",
+        badge: "UPDATE",
+        icon: "✏",
+        sql: `-- 5. EXECUTED UPDATE STATEMENTS (Data Modification)
+-- Update agent CSAT rating upon positive survey review
+UPDATE agents 
+SET csat_avg = 4.95, status = 'Active' 
+WHERE agent_id = 1;
+
+-- Update call record status to Resolved with updated customer rating
+UPDATE call_records 
+SET call_status = 'Resolved', rating = 5, notes = 'Issue verified and closed.' 
+WHERE call_id = 1003;
+
+-- Escalate incident priority and assign emergency SLA
+UPDATE incidents 
+SET status = 'RESOLVED', sla_hours = 2 
+WHERE ticket_id = 9021;`,
+        meta: [
+            { label: "DML Type", value: "UPDATE ... SET ... WHERE ..." },
+            { label: "Clause Used", value: "Parameterized WHERE clause on Primary Keys" },
+            { label: "Transaction Handling", value: "Audited with affected row count feedback" },
+            { label: "Referential Check", value: "Ensures foreign key consistency during record update" }
+        ]
+    },
+    deletes: {
+        title: "DELETE Statements Executed in PostgreSQL",
+        badge: "DELETE",
+        icon: "🗑",
+        sql: `-- 6. EXECUTED DELETE STATEMENTS (Record Removal)
+-- Remove dropped call transaction
+DELETE FROM call_records 
+WHERE call_id = 1013;
+
+-- Purge closed incident ticket
+DELETE FROM incidents 
+WHERE ticket_id = 9024;
+
+-- Note: Deleting a CALL_RECORD cascades to delete associated INCIDENTS (ON DELETE CASCADE)
+-- Deleting an AGENT is blocked if calls exist (ON DELETE RESTRICT)`,
+        meta: [
+            { label: "DML Type", value: "DELETE FROM ... WHERE ..." },
+            { label: "Constraint Handling", value: "ON DELETE CASCADE removes dependent incidents" },
+            { label: "Restrict Handling", value: "ON DELETE RESTRICT protects referenced agents" },
+            { label: "Affected Rows", value: "Returns precise count of deleted records" }
+        ]
+    }
+};
+
+function loadDmlDetail(key) {
+    activeDmlKey = key;
+    const item = DML_CATALOG[key];
+    if (!item) return;
+
+    // Sidebar active state
+    document.querySelectorAll('.command-sidebar .command-item-card').forEach(c => {
+        if (c.id && c.id.startsWith('dmlItem-')) c.classList.remove('active');
+    });
+    const activeCard = document.getElementById(`dmlItem-${key}`);
+    if (activeCard) activeCard.classList.add('active');
+
+    // Header info
+    document.getElementById('dmlViewerIcon').textContent = item.icon;
+    document.getElementById('dmlViewerTitle').textContent = item.title;
+
+    // Syntax-highlighted SQL
+    document.getElementById('dmlSqlCodeDisplay').innerHTML = formatSqlHighlight(item.sql);
+
+    // Meta grid
+    const metaContainer = document.getElementById('dmlMetaGrid');
+    metaContainer.innerHTML = '';
+    item.meta.forEach(m => {
+        const div = document.createElement('div');
+        div.className = 'meta-item';
+        div.innerHTML = `<label>${m.label}</label><span>${m.value}</span>`;
+        metaContainer.appendChild(div);
+    });
+}
+
+function copyCurrentDmlSql() {
+    const item = DML_CATALOG[activeDmlKey];
+    if (!item) return;
+    navigator.clipboard.writeText(item.sql).then(() => {
+        showToast('DML SQL Copied', `Copied statements for ${item.title}.`, 'success');
+    });
+}
+
+function runCurrentDmlInTerminal() {
+    const item = DML_CATALOG[activeDmlKey];
+    if (!item) return;
+    switchMainView('terminal');
+    const input = document.getElementById('sqlTerminalInput');
+    if (input) {
+        input.value = item.sql;
+        input.focus();
+    }
+    showToast('Sent to Terminal', 'DML statements loaded into SQL terminal.', 'info');
+}
+
+function handleDmlTableChange(tableName) {
+    const container = document.getElementById('dmlWorkbenchDynamicInputs');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const op = document.getElementById('dmlWorkbenchOpSelect').value;
+    const table = window.db.getTable(tableName);
+    if (!table) return;
+
+    if (op === 'DELETE') {
+        const pkCol = table.columns.find(c => c.isPk) || table.columns[0];
+        container.innerHTML = `
+            <div class="form-group">
+                <label>Record Primary Key to DELETE (${pkCol.name})</label>
+                <input type="text" id="dmlInput_${pkCol.name}" class="input-control" placeholder="e.g. ${table.rows[0] ? table.rows[0][pkCol.name] : '1'}" value="${table.rows[0] ? table.rows[0][pkCol.name] : '1'}" style="padding-left: 14px;">
+            </div>
+        `;
+    } else if (op === 'UPDATE') {
+        const pkCol = table.columns.find(c => c.isPk) || table.columns[0];
+        const nonPkCols = table.columns.filter(c => !c.isPk);
+        const sampleRow = table.rows[0] || {};
+
+        let fieldsHtml = `
+            <div class="form-group">
+                <label>Target Row ID (${pkCol.name})</label>
+                <input type="text" id="dmlInput_${pkCol.name}" class="input-control" value="${sampleRow[pkCol.name] || '1'}" style="padding-left: 14px;">
+            </div>
+            <div class="form-grid-2">
+        `;
+
+        nonPkCols.slice(0, 4).forEach(c => {
+            fieldsHtml += `
+                <div class="form-group">
+                    <label>New ${c.name}</label>
+                    <input type="text" id="dmlInput_${c.name}" class="input-control" value="${sampleRow[c.name] || ''}" style="padding-left: 14px;">
+                </div>
+            `;
+        });
+        fieldsHtml += `</div>`;
+        container.innerHTML = fieldsHtml;
+    } else {
+        // INSERT
+        let fieldsHtml = `<div class="form-grid-2">`;
+        table.columns.forEach(c => {
+            if (c.isPk) {
+                // Auto-suggest next pk
+                const nextId = (table.rows.length + 1) * 10;
+                fieldsHtml += `
+                    <div class="form-group">
+                        <label>${c.name} (PK)</label>
+                        <input type="text" id="dmlInput_${c.name}" class="input-control" value="${nextId}" style="padding-left: 14px;">
+                    </div>
+                `;
+            } else {
+                let defaultVal = '';
+                if (c.name.includes('DATE') || c.name.includes('CREATED')) defaultVal = '2026-10-13 16:30';
+                else if (c.name.includes('STATUS')) defaultVal = 'Resolved';
+                else if (c.name.includes('RATING')) defaultVal = '5';
+                else if (c.name.includes('DEPT') || c.name.includes('DEPARTMENT')) defaultVal = 'Technical Support';
+                else if (c.name.includes('DURATION')) defaultVal = '300';
+                else if (c.name.includes('NAME')) defaultVal = 'Test Record';
+                else if (c.name.includes('PHONE')) defaultVal = '+91 99999 88888';
+
+                fieldsHtml += `
+                    <div class="form-group">
+                        <label>${c.name}</label>
+                        <input type="text" id="dmlInput_${c.name}" class="input-control" value="${defaultVal}" style="padding-left: 14px;">
+                    </div>
+                `;
+            }
+        });
+        fieldsHtml += `</div>`;
+        container.innerHTML = fieldsHtml;
+    }
+
+    renderDmlWorkbenchPreview(tableName);
+}
+
+function handleDmlOpChange() {
+    const tbl = document.getElementById('dmlWorkbenchTableSelect').value;
+    handleDmlTableChange(tbl);
+}
+
+function executeDmlWorkbench() {
+    const tableName = document.getElementById('dmlWorkbenchTableSelect').value;
+    const op = document.getElementById('dmlWorkbenchOpSelect').value;
+    const table = window.db.getTable(tableName);
+
+    const startTime = performance.now();
+    try {
+        let executedSql = '';
+        let message = '';
+
+        if (op === 'INSERT') {
+            const record = {};
+            table.columns.forEach(c => {
+                const el = document.getElementById(`dmlInput_${c.name}`);
+                if (el) record[c.name] = el.value.trim();
+            });
+            const res = window.db.insert(tableName, record);
+            executedSql = res.sql;
+            message = res.message;
+        } else if (op === 'UPDATE') {
+            const pkCol = table.columns.find(c => c.isPk) || table.columns[0];
+            const pkVal = document.getElementById(`dmlInput_${pkCol.name}`).value.trim();
+            const updates = {};
+            table.columns.filter(c => !c.isPk).forEach(c => {
+                const el = document.getElementById(`dmlInput_${c.name}`);
+                if (el && el.value.trim() !== '') {
+                    updates[c.name] = el.value.trim();
+                }
+            });
+            const res = window.db.update(tableName, pkVal, updates);
+            executedSql = res.sql;
+            message = res.message;
+        } else if (op === 'DELETE') {
+            const pkCol = table.columns.find(c => c.isPk) || table.columns[0];
+            const pkVal = document.getElementById(`dmlInput_${pkCol.name}`).value.trim();
+            const res = window.db.delete(tableName, pkVal);
+            executedSql = res.sql;
+            message = res.message;
+        }
+
+        const duration = (performance.now() - startTime).toFixed(1);
+        document.getElementById('dmlWorkbenchLatency').textContent = `${duration} ms`;
+        const statusBox = document.getElementById('dmlWorkbenchStatus');
+        statusBox.className = 'output-status-strip success';
+        statusBox.textContent = `✓ ${message}`;
+
+        document.getElementById('dmlWorkbenchOutputSql').textContent = executedSql;
+
+        refreshActiveTable();
+        updateMetrics();
+        updateTransactionUi();
+        renderDmlWorkbenchPreview(tableName);
+        showToast('DML Executed', message, 'success');
+    } catch (err) {
+        const duration = (performance.now() - startTime).toFixed(1);
+        document.getElementById('dmlWorkbenchLatency').textContent = `${duration} ms`;
+        const statusBox = document.getElementById('dmlWorkbenchStatus');
+        statusBox.className = 'output-status-strip error';
+        statusBox.textContent = `✕ ${err.message}`;
+        showToast('DML Execution Error', err.message, 'error');
+    }
+}
+
+function renderDmlWorkbenchPreview(tableName) {
+    const container = document.getElementById('dmlWorkbenchPreviewTable');
+    if (!container) return;
+    const table = window.db.getTable(tableName);
+    if (!table || !table.rows.length) {
+        container.innerHTML = '<tbody><tr><td style="color: var(--text-muted); padding: 8px;">Table has no rows.</td></tr></tbody>';
+        return;
+    }
+
+    const cols = table.columns.slice(0, 5);
+    const rows = table.rows.slice(0, 3);
+
+    let html = '<thead><tr>';
+    cols.forEach(c => html += `<th>${c.name}</th>`);
+    html += '</tr></thead><tbody>';
+
+    rows.forEach(r => {
+        html += '<tr>';
+        cols.forEach(c => html += `<td>${r[c.name] !== undefined ? r[c.name] : ''}</td>`);
+        html += '</tr>';
+    });
+    html += '</tbody>';
+    container.innerHTML = html;
+}
+
+function formatSqlHighlight(sql) {
+    if (!sql) return '';
+    let escaped = sql
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    // Comments
+    escaped = escaped.replace(/(--.*$)/gm, '<span class="sql-comment">$1</span>');
+
+    // Keywords
+    const keywords = ['CREATE', 'TABLE', 'SERIAL', 'PRIMARY KEY', 'NOT NULL', 'UNIQUE', 'DEFAULT', 'INT', 'VARCHAR', 'TEXT', 'TIMESTAMP', 'CURRENT_TIMESTAMP', 'NUMERIC', 'CHECK', 'CONSTRAINT', 'FOREIGN KEY', 'REFERENCES', 'ON DELETE', 'CASCADE', 'RESTRICT', 'INDEX', 'ALTER', 'ADD COLUMN', 'DROP COLUMN', 'DROP', 'IF EXISTS', 'INSERT INTO', 'VALUES', 'UPDATE', 'SET', 'WHERE', 'DELETE FROM', 'SELECT', 'FROM'];
+    keywords.forEach(kw => {
+        const regex = new RegExp(`\\b${kw}\\b`, 'gi');
+        escaped = escaped.replace(regex, `<span class="sql-keyword">${kw}</span>`);
+    });
+
+    // Strings
+    escaped = escaped.replace(/'([^']*)'/g, '<span class="sql-string">\'$1\'</span>');
+
+    return escaped;
+}
+
